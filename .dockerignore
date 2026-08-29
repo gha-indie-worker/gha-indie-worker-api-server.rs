@@ -1,0 +1,54 @@
+# Build output. The release target/ tree runs to gigabytes; sending it to the
+# daemon would dwarf the actual build context.
+target/
+**/target/
+
+# VCS, editor and local tooling.
+.git/
+.gitignore
+.gitattributes
+.direnv/
+.idea/
+.vscode/
+node_modules/
+
+# zed-pkg install trees. These are materialized inside the build by the zpkg
+# stage; a developer's local symlink-mode install must not leak into the context
+# and shadow it (symlink-mode installs point into the local Zed store and would
+# dangle in a container).
+.vendor/
+.zed/
+result
+result-*
+
+# BEGIN ores-sops consumer exclusions
+# Canonical fragment from ORESoftware/ores-sops templates/consumer.dockerignore,
+# required by docs/consumer-boundary.md and enforced in CI.
+#
+# Plaintext dotenv at every depth.
+.env
+.env.*
+**/*.env
+**/*.env.*
+# Managed decrypted and encrypted environment trees.
+#
+# Ciphertext is excluded as well as plaintext, and that is deliberate.
+# Encryption protects values at rest, but copying env/enc into a build context
+# distributes a secret-bearing artifact through build caches, provenance
+# attestations and every registry the image reaches. This image decrypts at run
+# time from a mounted $SOPS_SECRETS_FILE instead, so the ciphertext never needs
+# to enter the context at all. See the Dockerfile header.
+env/dec
+env/dec/**
+env/enc
+env/enc/**
+# Common private-key and cloud credential artifacts.
+**/*.pem
+**/*.key
+**/*.p8
+**/*service-account*.json
+# END ores-sops consumer exclusions
+
+# Not needed to compile.
+Dockerfile
+.dockerignore
