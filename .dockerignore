@@ -1,0 +1,15 @@
+# BEGIN ores-sops dotenv policy — keep plaintext out of the build context.
+# Ciphertext (env/enc/*.env.enc) is re-included so the image can decrypt at
+# `docker run`; nothing is decrypted at build time.
+.git
+.github
+target
+node_modules
+.env
+.env.*
+*.env
+**/*.env
+env/dec
+!env/enc/*.env.enc
+!scripts/sops-entrypoint.sh
+# END ores-sops dotenv policy
