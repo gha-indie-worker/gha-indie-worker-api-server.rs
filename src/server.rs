@@ -11,10 +11,26 @@ pub enum TransportKind {
     DurableNats,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct ListenerBinding {
     pub transport: TransportKind,
     pub endpoint: String,
+}
+
+impl std::fmt::Debug for ListenerBinding {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ListenerBinding")
+            .field("transport", &self.transport)
+            .field(
+                "endpoint",
+                &match self.transport {
+                    TransportKind::DurableNats => "[redacted]",
+                    TransportKind::Http | TransportKind::StatefulTcp => &self.endpoint,
+                },
+            )
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -73,10 +89,13 @@ fn listener_binding(
 pub fn run(config: &ApiConfig) -> Result<(), ApiError> {
     let plan = startup_plan(config)?;
     for listener in &plan.listeners {
-        println!(
-            "api {:?} endpoint {}",
-            listener.transport, listener.endpoint
-        );
+        match listener.transport {
+            TransportKind::Http | TransportKind::StatefulTcp => println!(
+                "api {:?} endpoint {}",
+                listener.transport, listener.endpoint
+            ),
+            TransportKind::DurableNats => println!("api DurableNats configured"),
+        }
     }
     println!(
         "{}",
@@ -135,5 +154,19 @@ mod tests {
             error,
             ApiError::InvalidConfiguration("GHA_INDIE_WORKER_API_TCP_BIND")
         ));
+    }
+
+    #[test]
+    fn nats_credentials_are_redacted_from_the_printable_plan() {
+        let plan = startup_plan(&ApiConfig {
+            bind: "127.0.0.1:8080".into(),
+            tcp_bind: None,
+            nats_url: Some("nats://worker:credential@nats.internal:4222".into()),
+        })
+        .expect("valid NATS plan");
+
+        let debug = format!("{plan:?}");
+        assert!(debug.contains("[redacted]"));
+        assert!(!debug.contains("credential"));
     }
 }
