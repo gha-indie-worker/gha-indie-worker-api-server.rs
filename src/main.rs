@@ -1,9 +1,8 @@
 #![forbid(unsafe_code)]
 
-use gha_indie_worker_api_server::{config::ApiConfig, server};
+use gha_indie_worker_api_server::{config::ApiConfig, error::ApiError, server};
 
-fn main() {
+fn main() -> Result<(), ApiError> {
     let cfg = ApiConfig::from_env();
-    server::run(&cfg);
+    server::run(&cfg)
 }
-

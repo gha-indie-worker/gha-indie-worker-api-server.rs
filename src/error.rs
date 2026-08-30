@@ -8,5 +8,8 @@ pub enum ApiError {
     Unauthenticated,
     #[error("forbidden")]
     Forbidden,
+    #[error("invalid configuration: {0}")]
+    InvalidConfiguration(&'static str),
+    #[error("response serialization failed")]
+    Serialization,
 }
-
