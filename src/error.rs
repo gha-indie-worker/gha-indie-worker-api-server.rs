@@ -12,4 +12,6 @@ pub enum ApiError {
     InvalidConfiguration(&'static str),
     #[error("response serialization failed")]
     Serialization,
+    #[error("configuration resolution failed: {0}")]
+    ConfigurationResolution(String),
 }
