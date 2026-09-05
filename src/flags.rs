@@ -97,4 +97,32 @@ mod tests {
         assert!(error.contains("--definitely-unknown"));
         assert!(!error.contains("do-not-echo"));
     }
+
+    #[test]
+    fn nats_url_flag_resolves_and_credential_flags_are_rejected() {
+        let resolved = resolve_from(
+            &[
+                "server".to_owned(),
+                "--gha-indie-worker-nats-url=nats://127.0.0.1:4222".to_owned(),
+            ],
+            std::iter::empty(),
+        )
+        .expect("nats url is a documented flag");
+        assert!(
+            resolved.values().any(|value| value == "nats://127.0.0.1:4222"),
+            "resolved keys: {:?}",
+            resolved.keys().collect::<Vec<_>>()
+        );
+
+        let error = resolve_from(
+            &[
+                "server".to_owned(),
+                "--gha-indie-worker-nats-password=secret-value".to_owned(),
+            ],
+            std::iter::empty(),
+        )
+        .expect_err("NATS credentials must not be CLI flags");
+        assert!(error.contains("--gha-indie-worker-nats-password"));
+        assert!(!error.contains("secret-value"));
+    }
 }
