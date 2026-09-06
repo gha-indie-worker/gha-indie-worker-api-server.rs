@@ -1,0 +1,135 @@
+# Deploys the image `images.yml` just pushed to GCP Artifact Registry.
+#
+# Triggered by `workflow_run` on the images workflow, and only on `main` and
+# only when that run succeeded — so a failed image build can never deploy, and a
+# branch build never reaches production.
+#
+# Authentication is Workload Identity Federation (OIDC). There are no JSON
+# service-account keys anywhere in this repository or in its secrets.
+#
+# The deployed image is pinned to the **digest**, never to a moving tag: a
+# revision must be reproducible from its own reference.
+name: deploy-cloud-run
+
+on:
+  workflow_run:
+    workflows: ["images"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_digest:
+        description: "Image digest to deploy, e.g. sha256:abc… (defaults to the commit tag)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-cloud-run
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT: gha-indie-worker
+  REGION: us-central1
+  SERVICE: gha-indie-worker-api
+  ARTIFACT_REGISTRY: us-central1-docker.pkg.dev
+  REPOSITORY: gha-indie-worker
+  IMAGE: gha-indie-worker-api-server.rs
+
+jobs:
+  deploy:
+    # `workflow_run` fires for every conclusion, so the success check is the
+    # gate, not the trigger.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the exact source that produced the image
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Authenticate to Google Cloud with workload identity federation
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up the gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT }}
+
+      - name: Resolve the image digest
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="${{ github.event.workflow_run.head_sha || github.sha }}"
+          base="${ARTIFACT_REGISTRY}/${GCP_PROJECT}/${REPOSITORY}/${IMAGE}"
+
+          supplied="${{ inputs.image_digest }}"
+          if [ -n "${supplied}" ]; then
+            echo "reference=${base}@${supplied}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Resolve the commit tag to its immutable digest. Deploying a tag
+          # would let the same revision mean different bytes later.
+          digest="$(gcloud artifacts docker images describe \
+            "${base}:${sha}" \
+            --format='value(image_summary.digest)')"
+          if [ -z "${digest}" ]; then
+            echo "no digest found for ${base}:${sha}" >&2
+            exit 1
+          fi
+          echo "reference=${base}@${digest}" >> "$GITHUB_OUTPUT"
+          echo "Deploying ${base}@${digest}"
+
+      - name: Deploy to Cloud Run
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud run deploy "${SERVICE}" \
+            --image "${{ steps.image.outputs.reference }}" \
+            --region "${REGION}" \
+            --platform managed \
+            --port 8080 \
+            --min-instances 1 \
+            --max-instances 10 \
+            --cpu 1 \
+            --memory 512Mi \
+            --concurrency 80 \
+            --timeout 120s \
+            --no-allow-unauthenticated \
+            --set-env-vars "GHA_INDIE_WORKER_ENV=prod,GHA_INDIE_WORKER_API_BIND=0.0.0.0:8080,RUST_LOG=info" \
+            --quiet
+
+      - name: Wait for the new revision to become ready
+        shell: bash
+        run: |
+          set -euo pipefail
+          # `gcloud run deploy` returns once the revision is serving, but the
+          # readiness contract is ours: assert it explicitly rather than
+          # assuming a green deploy means a ready service.
+          for _ in $(seq 1 20); do
+            status="$(gcloud run services describe "${SERVICE}" \
+              --region "${REGION}" \
+              --format='value(status.conditions[0].status)')"
+            if [ "${status}" = "True" ]; then
+              echo "revision is ready"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "the new revision did not become ready" >&2
+          gcloud run services describe "${SERVICE}" --region "${REGION}" --format=yaml >&2
+          exit 1

@@ -1,22 +1,118 @@
-    [package]
-    name = "gha-indie-worker-api-server"
-    version = "0.1.0"
-    edition = "2021"
-    license = "MIT"
-    description = "JSON API server for GHA Indie Worker"
-    repository = "https://github.com/gha-indie-worker/gha-indie-worker-api-server.rs"
+[package]
+name = "gha-indie-worker-api-server"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+license = "MIT"
+description = "JSON API server for GHA Indie Worker (api.indiebuild.dev)"
+repository = "https://github.com/gha-indie-worker/gha-indie-worker-api-server.rs"
+default-run = "gha-indie-worker-api-server"
 
-    [features]
-    default = ["tcp-transport", "nats-transport"]
-    tcp-transport = []
-    nats-transport = []
+[lib]
+name = "gha_indie_worker_api_server"
+path = "src/lib.rs"
 
-    [dependencies]
-    serde = { version = "1", features = ["derive"] }
-    serde_json = "1"
-    thiserror = "2"
+[[bin]]
+name = "gha-indie-worker-api-server"
+path = "src/main.rs"
+
+[features]
+# Everything the gate compiles by default. Each fleet integration lives behind
+# its own flag *and* in exactly one module, so a single upstream API drift is
+# contained to one `--no-default-features --features …` invocation.
+default = [
+  "db",
+  "otel",
+  "ores-mw",
+  "ores-rl",
+  "shared-auth",
+  "interfaces",
+  "tcp-transport",
+  "nats-transport",
+]
+
+# SeaORM pools (`src/transport/db.rs`). Never runs DDL.
+db = ["dep:sea-orm"]
+# Entities from gha-indie-worker-orm-core. NOT default: the repository is not
+# published yet — see docs/orm-core-entities.md for the expected entity set.
+orm-core = ["db", "dep:gha-indie-worker-orm-core"]
+# ores-otel next-loggers → tracing bridge (`src/telemetry.rs`).
+otel = ["dep:next-loggers"]
+# ores-middleware axum stack (`src/middleware.rs`). Needs the ores logger.
+ores-mw = ["dep:ores-middleware", "otel"]
+# ores-rl-lib-core state-machine bridge (`src/rate_limit.rs::ores_rl`).
+ores-rl = ["dep:ores-rl-lib-core"]
+# shared-auth introspection (`src/auth/shared_auth.rs`).
+shared-auth = ["dep:shared-auth-client"]
+# Shared contract types (`gha-indie-worker-interfaces`).
+interfaces = ["dep:gha-indie-worker-interfaces"]
+# Length-prefixed JSON frame listener (`src/transport/tcp.rs`).
+tcp-transport = []
+# NATS publish + core-subscribe intake (`src/transport/nats.rs`).
+nats-transport = ["dep:async-nats", "dep:bytes"]
+
+[dependencies]
+axum = { version = "0.8", features = ["macros", "ws"] }
+bytes = { version = "1", optional = true }
+futures-util = "0.3"
+hmac = "0.12"
+jsonwebtoken = "9"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+subtle = "2"
+thiserror = "2"
+time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "sync", "time", "io-util"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["trace", "request-id", "sensitive-headers", "timeout", "compression-full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+uuid = { version = "1", features = ["serde", "v4", "v7"] }
+
+async-nats = { version = "0.38", optional = true }
+sea-orm = { version = "2.0.0", default-features = false, features = ["macros", "runtime-tokio-rustls", "sqlx-postgres", "with-json", "with-uuid", "with-time"], optional = true }
+
+[dependencies.gha-indie-worker-interfaces]
+git = "https://github.com/gha-indie-worker/gha-indie-worker-interfaces"
+rev = "38dad2cfbc2b26f8f962717056fad5ab9758b5a8"
+optional = true
+
+# Not published yet. Enable with `--features orm-core` once the repository
+# exists and matches docs/orm-core-entities.md.
+[dependencies.gha-indie-worker-orm-core]
+git = "https://github.com/gha-indie-worker/gha-indie-worker-orm-core"
+branch = "main"
+optional = true
+
+[dependencies.next-loggers]
+package = "oresoftware-next-loggers"
+git = "https://github.com/ores-otel/ores.otel.log.git"
+rev = "b55271c047be761c4711d87cbd500a49eefda3d9"
+optional = true
+
+[dependencies.ores-middleware]
+git = "https://github.com/ORESoftware/ores-middleware"
+rev = "6f73bf1ae97f38f05e2e87e4eb3e0e18e0142529"
+features = ["axum", "compression"]
+optional = true
+
+[dependencies.ores-rl-lib-core]
+git = "https://github.com/ores-rate-limit/ores-rl-lib-core"
+tag = "v0.2.0"
+features = ["redis-backend"]
+optional = true
+
+[dependencies.shared-auth-client]
+package = "shared-auth-client"
+git = "https://github.com/shared-auth/shared-auth-clients"
+rev = "cc57a85b276bee81ad94decc87df2f48d49cab9f"
+optional = true
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }
 
 [lints.rust]
 unsafe_code = "forbid"
-
-
