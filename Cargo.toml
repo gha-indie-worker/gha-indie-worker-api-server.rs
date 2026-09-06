@@ -100,7 +100,7 @@ optional = true
 
 [dependencies.ores-rl-lib-core]
 git = "https://github.com/ores-rate-limit/ores-rl-lib-core"
-tag = "v0.2.0"
+rev = "31df606d26280611e2d2d684328a804644eb4255"
 features = ["redis-backend"]
 optional = true
 
