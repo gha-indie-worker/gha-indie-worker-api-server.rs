@@ -33,6 +33,14 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      - name: Stage the commit-pinned private rate-limit core
+        uses: ores-rate-limit/ores-rl-lib-core@31df606d26280611e2d2d684328a804644eb4255
+        with:
+          target-path: .zed-deps/ores-rl-lib-core
+      - name: Stage the commit-pinned private shared-auth client
+        uses: shared-auth/shared-auth-clients@04b7265c9f588f7b6891f49b8f0102194f536be4
+        with:
+          target-path: .zed-deps/shared-auth-client
       - name: Install Rust 1.88.0
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -60,14 +68,14 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Lint
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings --config 'patch."https://github.com/ores-rate-limit/ores-rl-lib-core".ores-rl-lib-core.path=".zed-deps/ores-rl-lib-core"' --config 'patch."https://github.com/shared-auth/shared-auth-clients".shared-auth-client.path=".zed-deps/shared-auth-client"'
 
       - name: Test
-        run: cargo test --all-targets
+        run: cargo test --all-targets --config 'patch."https://github.com/ores-rate-limit/ores-rl-lib-core".ores-rl-lib-core.path=".zed-deps/ores-rl-lib-core"' --config 'patch."https://github.com/shared-auth/shared-auth-clients".shared-auth-client.path=".zed-deps/shared-auth-client"'
 
       # Doctests are not covered by --all-targets.
       - name: Doc tests
-        run: cargo test --doc
+        run: cargo test --doc --config 'patch."https://github.com/ores-rate-limit/ores-rl-lib-core".ores-rl-lib-core.path=".zed-deps/ores-rl-lib-core"' --config 'patch."https://github.com/shared-auth/shared-auth-clients".shared-auth-client.path=".zed-deps/shared-auth-client"'
 
   # The whole point of the feature layout: every fleet integration is isolated,
   # so the crate still builds with each one switched off. This job proves that
@@ -81,15 +89,23 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      - name: Stage the commit-pinned private rate-limit core
+        uses: ores-rate-limit/ores-rl-lib-core@31df606d26280611e2d2d684328a804644eb4255
+        with:
+          target-path: .zed-deps/ores-rl-lib-core
+      - name: Stage the commit-pinned private shared-auth client
+        uses: shared-auth/shared-auth-clients@04b7265c9f588f7b6891f49b8f0102194f536be4
+        with:
+          target-path: .zed-deps/shared-auth-client
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
 
       - name: Build with no fleet dependencies at all
-        run: cargo check --no-default-features --features db,tcp-transport --all-targets
+        run: cargo check --no-default-features --features db,tcp-transport --all-targets --config 'patch."https://github.com/ores-rate-limit/ores-rl-lib-core".ores-rl-lib-core.path=".zed-deps/ores-rl-lib-core"' --config 'patch."https://github.com/shared-auth/shared-auth-clients".shared-auth-client.path=".zed-deps/shared-auth-client"'
 
       - name: Test with no fleet dependencies at all
-        run: cargo test --no-default-features --features db,tcp-transport
+        run: cargo test --no-default-features --features db,tcp-transport --config 'patch."https://github.com/ores-rate-limit/ores-rl-lib-core".ores-rl-lib-core.path=".zed-deps/ores-rl-lib-core"' --config 'patch."https://github.com/shared-auth/shared-auth-clients".shared-auth-client.path=".zed-deps/shared-auth-client"'
 
   manifest-contract:
     runs-on: ubuntu-24.04
@@ -100,6 +116,14 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      - name: Stage the commit-pinned private rate-limit core
+        uses: ores-rate-limit/ores-rl-lib-core@31df606d26280611e2d2d684328a804644eb4255
+        with:
+          target-path: .zed-deps/ores-rl-lib-core
+      - name: Stage the commit-pinned private shared-auth client
+        uses: shared-auth/shared-auth-clients@04b7265c9f588f7b6891f49b8f0102194f536be4
+        with:
+          target-path: .zed-deps/shared-auth-client
       - name: Verify the pinned fleet revisions and declared environment surface
         shell: bash
         run: |
@@ -155,6 +179,14 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      - name: Stage the commit-pinned private rate-limit core
+        uses: ores-rate-limit/ores-rl-lib-core@31df606d26280611e2d2d684328a804644eb4255
+        with:
+          target-path: .zed-deps/ores-rl-lib-core
+      - name: Stage the commit-pinned private shared-auth client
+        uses: shared-auth/shared-auth-clients@04b7265c9f588f7b6891f49b8f0102194f536be4
+        with:
+          target-path: .zed-deps/shared-auth-client
       - name: Authenticate git for private fleet dependencies
         if: env.FLEET_TOKEN != ''
         run: |
@@ -219,6 +251,14 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
+      - name: Stage the commit-pinned private rate-limit core
+        uses: ores-rate-limit/ores-rl-lib-core@31df606d26280611e2d2d684328a804644eb4255
+        with:
+          target-path: .zed-deps/ores-rl-lib-core
+      - name: Stage the commit-pinned private shared-auth client
+        uses: shared-auth/shared-auth-clients@04b7265c9f588f7b6891f49b8f0102194f536be4
+        with:
+          target-path: .zed-deps/shared-auth-client
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
