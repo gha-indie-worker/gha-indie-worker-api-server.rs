@@ -1,3 +1,4 @@
+# GENERATED from Dockerfile (sha256:6b3d8ee5ed27950d) by ores-gha-workflows/scripts/render-dkf.mjs — target linux/amd64. Do not edit; edit Dockerfile and re-render.
 # syntax=docker/dockerfile:1.7
 #
 # Multi-stage image for gha-indie-worker-api-server.
@@ -12,7 +13,8 @@
 # Secrets are decrypted at `docker run`, never at `docker build`: a build-time
 # decrypt writes plaintext into an immutable layer that ships with the image.
 
-FROM rust:1.88-slim-bookworm AS build
+FROM --platform=linux/amd64 rust:1.88-slim-bookworm AS build
+ARG TARGETARCH
 WORKDIR /src
 
 # Toolchain prerequisites only. Every TLS client here uses rustls, so there is
@@ -29,7 +31,7 @@ COPY . .
 RUN cargo build --release --bin gha-indie-worker-api-server \
     && strip target/release/gha-indie-worker-api-server
 
-FROM debian:bookworm-slim AS runtime
+FROM --platform=linux/amd64 debian:bookworm-slim AS runtime
 ARG SOPS_ENV=prod
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates \

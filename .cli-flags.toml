@@ -1,4 +1,9 @@
-# flags-2-env surface for `ghaiw-api`
+# flags-2-env surface for `ghaiw-api` (gha-indie-worker-api-server).
+#
+# Every environment variable the server reads is declared here and documented in
+# `.env.example`. `src/config.rs` is the only place that reads the environment,
+# and `ApiConfig`'s `Debug` redacts every credential-bearing value.
+
 [flags.config]
 env = "GHA_INDIE_WORKER_CONFIG"
 long = "config"
@@ -33,3 +38,241 @@ env = "GHA_INDIE_WORKER_NATS_URL"
 long = "gha-indie-worker-nats-url"
 type = "string"
 help = "Runtime environment key GHA_INDIE_WORKER_NATS_URL."
+
+# ---- process ---------------------------------------------------------------
+
+[flags.gha-indie-worker-env]
+env = "GHA_INDIE_WORKER_ENV"
+long = "gha-indie-worker-env"
+type = "string"
+help = "Deployment environment: dev, staging or prod. Namespaces NATS subjects."
+
+[flags.gha-indie-worker-api-shutdown-grace-seconds]
+env = "GHA_INDIE_WORKER_API_SHUTDOWN_GRACE_SECONDS"
+long = "gha-indie-worker-api-shutdown-grace-seconds"
+type = "string"
+help = "Seconds to drain in-flight work before connections are force-closed."
+
+[flags.gha-indie-worker-api-request-timeout-seconds]
+env = "GHA_INDIE_WORKER_API_REQUEST_TIMEOUT_SECONDS"
+long = "gha-indie-worker-api-request-timeout-seconds"
+type = "string"
+help = "Per-request deadline enforced by the timeout layer."
+
+[flags.gha-indie-worker-api-max-body-bytes]
+env = "GHA_INDIE_WORKER_API_MAX_BODY_BYTES"
+long = "gha-indie-worker-api-max-body-bytes"
+type = "string"
+help = "Largest accepted request body, in bytes."
+
+[flags.gha-indie-worker-nats-intake-enabled]
+env = "GHA_INDIE_WORKER_NATS_INTAKE_ENABLED"
+long = "gha-indie-worker-nats-intake-enabled"
+switch = true
+help = "Consume run requests from giw.<env>.runs.requests."
+
+# ---- database (SeaORM; never runs DDL) -------------------------------------
+
+[flags.database-url-canonical]
+env = "DATABASE_URL_CANONICAL"
+long = "database-url-canonical"
+type = "string"
+help = "Canonical product database. Readiness is fail-closed on this pool."
+
+[flags.database-url-auth]
+env = "DATABASE_URL_AUTH"
+long = "database-url-auth"
+type = "string"
+help = "Federated auth projection database."
+
+[flags.gha-indie-worker-db-max-connections]
+env = "GHA_INDIE_WORKER_DB_MAX_CONNECTIONS"
+long = "gha-indie-worker-db-max-connections"
+type = "string"
+help = "Maximum connections per SeaORM pool."
+
+[flags.gha-indie-worker-db-connect-timeout-seconds]
+env = "GHA_INDIE_WORKER_DB_CONNECT_TIMEOUT_SECONDS"
+long = "gha-indie-worker-db-connect-timeout-seconds"
+type = "string"
+help = "Connect and acquire timeout for the SeaORM pools."
+
+# ---- authentication (shared-auth + Supabase/Neon dual auth) ----------------
+
+[flags.shared-auth-base]
+env = "SHARED_AUTH_BASE"
+long = "shared-auth-base"
+type = "string"
+help = "shared-auth mounted base URL. Must be set together with the introspection secret."
+
+[flags.shared-auth-audience]
+env = "SHARED_AUTH_AUDIENCE"
+long = "shared-auth-audience"
+type = "string"
+help = "Delegated product audience this server introspects against."
+
+[flags.shared-auth-introspect-secret]
+env = "SHARED_AUTH_INTROSPECT_SECRET"
+long = "shared-auth-introspect-secret"
+type = "string"
+help = "Independent service credential for protected introspection. At least 32 bytes."
+
+[flags.supabase-url]
+env = "SUPABASE_URL"
+long = "supabase-url"
+type = "string"
+help = "Supabase project URL."
+
+[flags.supabase-anon-key]
+env = "SUPABASE_ANON_KEY"
+long = "supabase-anon-key"
+type = "string"
+help = "Supabase anon key. Never logged."
+
+[flags.supabase-jwt-secret]
+env = "SUPABASE_JWT_SECRET"
+long = "supabase-jwt-secret"
+type = "string"
+help = "Supabase HS256 signing secret, for projects on symmetric keys."
+
+[flags.neon-auth-url]
+env = "NEON_AUTH_URL"
+long = "neon-auth-url"
+type = "string"
+help = "Neon Auth base URL."
+
+[flags.neon-auth-jwks-url]
+env = "NEON_AUTH_JWKS_URL"
+long = "neon-auth-jwks-url"
+type = "string"
+help = "JWKS endpoint for asymmetric JWT verification."
+
+[flags.gha-indie-worker-jwt-issuers]
+env = "GHA_INDIE_WORKER_JWT_ISSUERS"
+long = "gha-indie-worker-jwt-issuers"
+type = "string"
+help = "Comma-separated accepted iss values. Empty means the issuer is not pinned."
+
+[flags.gha-indie-worker-jwt-audiences]
+env = "GHA_INDIE_WORKER_JWT_AUDIENCES"
+long = "gha-indie-worker-jwt-audiences"
+type = "string"
+help = "Comma-separated accepted aud values. Empty means the audience is not pinned."
+
+[flags.gha-indie-worker-jwks-ttl-seconds]
+env = "GHA_INDIE_WORKER_JWKS_TTL_SECONDS"
+long = "gha-indie-worker-jwks-ttl-seconds"
+type = "string"
+help = "How long a fetched JWKS is trusted before it is refreshed."
+
+# ---- webhooks --------------------------------------------------------------
+
+[flags.gha-indie-worker-github-webhook-secret]
+env = "GHA_INDIE_WORKER_GITHUB_WEBHOOK_SECRET"
+long = "gha-indie-worker-github-webhook-secret"
+type = "string"
+help = "GitHub X-Hub-Signature-256 HMAC secret. At least 32 bytes."
+
+[flags.gha-indie-worker-webhook-delivery-ttl-seconds]
+env = "GHA_INDIE_WORKER_WEBHOOK_DELIVERY_TTL_SECONDS"
+long = "gha-indie-worker-webhook-delivery-ttl-seconds"
+type = "string"
+help = "Delivery-id de-duplication retention window."
+
+[flags.gha-indie-worker-max-webhook-deliveries]
+env = "GHA_INDIE_WORKER_MAX_WEBHOOK_DELIVERIES"
+long = "gha-indie-worker-max-webhook-deliveries"
+type = "string"
+help = "Upper bound on retained delivery ids."
+
+# ---- chat proxy ------------------------------------------------------------
+
+[flags.ores-chat-api-base]
+env = "ORES_CHAT_API_BASE"
+long = "ores-chat-api-base"
+type = "string"
+help = "ores-chat upstream that /v1/chat/* proxies to."
+
+[flags.ores-chat-timeout-seconds]
+env = "ORES_CHAT_TIMEOUT_SECONDS"
+long = "ores-chat-timeout-seconds"
+type = "string"
+help = "Per-request timeout for the chat proxy."
+
+# ---- embeddings ------------------------------------------------------------
+
+[flags.gha-indie-worker-embeddings-base]
+env = "GHA_INDIE_WORKER_EMBEDDINGS_BASE"
+long = "gha-indie-worker-embeddings-base"
+type = "string"
+help = "OpenAI-compatible embeddings base URL. Unset uses the deterministic local provider."
+
+[flags.gha-indie-worker-embeddings-api-key]
+env = "GHA_INDIE_WORKER_EMBEDDINGS_API_KEY"
+long = "gha-indie-worker-embeddings-api-key"
+type = "string"
+help = "Bearer credential for the embeddings provider. Never logged."
+
+[flags.gha-indie-worker-embeddings-model]
+env = "GHA_INDIE_WORKER_EMBEDDINGS_MODEL"
+long = "gha-indie-worker-embeddings-model"
+type = "string"
+help = "Embedding model name."
+
+[flags.gha-indie-worker-embeddings-dims]
+env = "GHA_INDIE_WORKER_EMBEDDINGS_DIMS"
+long = "gha-indie-worker-embeddings-dims"
+type = "string"
+help = "Model dimension, 1-4096. Zero-padded into the fixed 4100 halfvec slots."
+
+[flags.gha-indie-worker-embeddings-timeout-seconds]
+env = "GHA_INDIE_WORKER_EMBEDDINGS_TIMEOUT_SECONDS"
+long = "gha-indie-worker-embeddings-timeout-seconds"
+type = "string"
+help = "Per-request timeout for the embeddings provider."
+
+# ---- rate limiting ---------------------------------------------------------
+
+[flags.gha-indie-worker-rate-limit-hmac-secret]
+env = "GHA_INDIE_WORKER_RATE_LIMIT_HMAC_SECRET"
+long = "gha-indie-worker-rate-limit-hmac-secret"
+type = "string"
+help = "HMAC key for opaque rate-limit principals. Falls back to ORES_MIDDLEWARE_RATE_LIMIT_HMAC_SECRET, then to an ephemeral key."
+
+[flags.gha-indie-worker-rate-limit-capacity]
+env = "GHA_INDIE_WORKER_RATE_LIMIT_CAPACITY"
+long = "gha-indie-worker-rate-limit-capacity"
+type = "string"
+help = "Requests permitted per principal per window."
+
+[flags.gha-indie-worker-rate-limit-window-seconds]
+env = "GHA_INDIE_WORKER_RATE_LIMIT_WINDOW_SECONDS"
+long = "gha-indie-worker-rate-limit-window-seconds"
+type = "string"
+help = "Rate-limit window length in seconds."
+
+# ---- workers and websocket -------------------------------------------------
+
+[flags.gha-indie-worker-heartbeat-ttl-seconds]
+env = "GHA_INDIE_WORKER_HEARTBEAT_TTL_SECONDS"
+long = "gha-indie-worker-heartbeat-ttl-seconds"
+type = "string"
+help = "How long a worker may go without a heartbeat before it reads as stale."
+
+[flags.gha-indie-worker-ws-max-connections]
+env = "GHA_INDIE_WORKER_WS_MAX_CONNECTIONS"
+long = "gha-indie-worker-ws-max-connections"
+type = "string"
+help = "Concurrent WebSocket connection ceiling. Over the cap the upgrade is refused with 503."
+
+[flags.gha-indie-worker-ws-channel-capacity]
+env = "GHA_INDIE_WORKER_WS_CHANNEL_CAPACITY"
+long = "gha-indie-worker-ws-channel-capacity"
+type = "string"
+help = "Bounded broadcast capacity per socket. A slower client is lagged, never buffered without limit."
+
+[flags.gha-indie-worker-ws-heartbeat-seconds]
+env = "GHA_INDIE_WORKER_WS_HEARTBEAT_SECONDS"
+long = "gha-indie-worker-ws-heartbeat-seconds"
+type = "string"
+help = "Server-side WebSocket ping interval."
