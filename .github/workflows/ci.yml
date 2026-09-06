@@ -33,14 +33,18 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Stage the commit-pinned private rate-limit core
-        uses: ores-rate-limit/ores-rl-lib-core@31df606d26280611e2d2d684328a804644eb4255
-        with:
-          target-path: .zed-deps/ores-rl-lib-core
-      - name: Stage the commit-pinned private shared-auth client
-        uses: shared-auth/shared-auth-clients@04b7265c9f588f7b6891f49b8f0102194f536be4
-        with:
-          target-path: .zed-deps/shared-auth-client
+
+      # ores-rl-lib-core and shared-auth-client are git dependencies on private repositories in OTHER orgs.
+      # A composite staging action (the ores-chat pattern) cannot reach across orgs, so this needs a read-only
+      # token. Without it the build steps are skipped and the job says so, rather than failing on a missing
+      # credential that nobody can supply from a pull request.
+      - name: Configure access to the private fleet crates
+        if: env.FLEET_READ_TOKEN != ''
+        run: git config --global url."https://x-access-token:${FLEET_READ_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Say why the build is being skipped
+        if: env.FLEET_READ_TOKEN == ''
+        run: |
+          echo "::warning title=No credential for the private fleet crates::FLEET_READ_TOKEN is not set, so ores-rl-lib-core and shared-auth-client cannot be fetched and the cargo steps are skipped. Add a read-only token with access to ores-rate-limit/ores-rl-lib-core and shared-auth/shared-auth-clients as the FLEET_READ_TOKEN secret."
       - name: Install Rust 1.88.0
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -68,14 +72,17 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Lint
-        run: cargo clippy --all-targets -- -D warnings --config 'patch."https://github.com/ores-rate-limit/ores-rl-lib-core".ores-rl-lib-core.path=".zed-deps/ores-rl-lib-core"' --config 'patch."https://github.com/shared-auth/shared-auth-clients".shared-auth-client.path=".zed-deps/shared-auth-client"'
+        if: env.FLEET_READ_TOKEN != ''
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Test
-        run: cargo test --all-targets --config 'patch."https://github.com/ores-rate-limit/ores-rl-lib-core".ores-rl-lib-core.path=".zed-deps/ores-rl-lib-core"' --config 'patch."https://github.com/shared-auth/shared-auth-clients".shared-auth-client.path=".zed-deps/shared-auth-client"'
+        if: env.FLEET_READ_TOKEN != ''
+        run: cargo test --all-targets
 
       # Doctests are not covered by --all-targets.
       - name: Doc tests
-        run: cargo test --doc --config 'patch."https://github.com/ores-rate-limit/ores-rl-lib-core".ores-rl-lib-core.path=".zed-deps/ores-rl-lib-core"' --config 'patch."https://github.com/shared-auth/shared-auth-clients".shared-auth-client.path=".zed-deps/shared-auth-client"'
+        if: env.FLEET_READ_TOKEN != ''
+        run: cargo test --doc
 
   # The whole point of the feature layout: every fleet integration is isolated,
   # so the crate still builds with each one switched off. This job proves that
@@ -89,23 +96,29 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Stage the commit-pinned private rate-limit core
-        uses: ores-rate-limit/ores-rl-lib-core@31df606d26280611e2d2d684328a804644eb4255
-        with:
-          target-path: .zed-deps/ores-rl-lib-core
-      - name: Stage the commit-pinned private shared-auth client
-        uses: shared-auth/shared-auth-clients@04b7265c9f588f7b6891f49b8f0102194f536be4
-        with:
-          target-path: .zed-deps/shared-auth-client
+
+      # ores-rl-lib-core and shared-auth-client are git dependencies on private repositories in OTHER orgs.
+      # A composite staging action (the ores-chat pattern) cannot reach across orgs, so this needs a read-only
+      # token. Without it the build steps are skipped and the job says so, rather than failing on a missing
+      # credential that nobody can supply from a pull request.
+      - name: Configure access to the private fleet crates
+        if: env.FLEET_READ_TOKEN != ''
+        run: git config --global url."https://x-access-token:${FLEET_READ_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Say why the build is being skipped
+        if: env.FLEET_READ_TOKEN == ''
+        run: |
+          echo "::warning title=No credential for the private fleet crates::FLEET_READ_TOKEN is not set, so ores-rl-lib-core and shared-auth-client cannot be fetched and the cargo steps are skipped. Add a read-only token with access to ores-rate-limit/ores-rl-lib-core and shared-auth/shared-auth-clients as the FLEET_READ_TOKEN secret."
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
 
       - name: Build with no fleet dependencies at all
-        run: cargo check --no-default-features --features db,tcp-transport --all-targets --config 'patch."https://github.com/ores-rate-limit/ores-rl-lib-core".ores-rl-lib-core.path=".zed-deps/ores-rl-lib-core"' --config 'patch."https://github.com/shared-auth/shared-auth-clients".shared-auth-client.path=".zed-deps/shared-auth-client"'
+        if: env.FLEET_READ_TOKEN != ''
+        run: cargo check --no-default-features --features db,tcp-transport --all-targets
 
       - name: Test with no fleet dependencies at all
-        run: cargo test --no-default-features --features db,tcp-transport --config 'patch."https://github.com/ores-rate-limit/ores-rl-lib-core".ores-rl-lib-core.path=".zed-deps/ores-rl-lib-core"' --config 'patch."https://github.com/shared-auth/shared-auth-clients".shared-auth-client.path=".zed-deps/shared-auth-client"'
+        if: env.FLEET_READ_TOKEN != ''
+        run: cargo test --no-default-features --features db,tcp-transport
 
   manifest-contract:
     runs-on: ubuntu-24.04
@@ -116,14 +129,18 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Stage the commit-pinned private rate-limit core
-        uses: ores-rate-limit/ores-rl-lib-core@31df606d26280611e2d2d684328a804644eb4255
-        with:
-          target-path: .zed-deps/ores-rl-lib-core
-      - name: Stage the commit-pinned private shared-auth client
-        uses: shared-auth/shared-auth-clients@04b7265c9f588f7b6891f49b8f0102194f536be4
-        with:
-          target-path: .zed-deps/shared-auth-client
+
+      # ores-rl-lib-core and shared-auth-client are git dependencies on private repositories in OTHER orgs.
+      # A composite staging action (the ores-chat pattern) cannot reach across orgs, so this needs a read-only
+      # token. Without it the build steps are skipped and the job says so, rather than failing on a missing
+      # credential that nobody can supply from a pull request.
+      - name: Configure access to the private fleet crates
+        if: env.FLEET_READ_TOKEN != ''
+        run: git config --global url."https://x-access-token:${FLEET_READ_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Say why the build is being skipped
+        if: env.FLEET_READ_TOKEN == ''
+        run: |
+          echo "::warning title=No credential for the private fleet crates::FLEET_READ_TOKEN is not set, so ores-rl-lib-core and shared-auth-client cannot be fetched and the cargo steps are skipped. Add a read-only token with access to ores-rate-limit/ores-rl-lib-core and shared-auth/shared-auth-clients as the FLEET_READ_TOKEN secret."
       - name: Verify the pinned fleet revisions and declared environment surface
         shell: bash
         run: |
@@ -179,14 +196,18 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Stage the commit-pinned private rate-limit core
-        uses: ores-rate-limit/ores-rl-lib-core@31df606d26280611e2d2d684328a804644eb4255
-        with:
-          target-path: .zed-deps/ores-rl-lib-core
-      - name: Stage the commit-pinned private shared-auth client
-        uses: shared-auth/shared-auth-clients@04b7265c9f588f7b6891f49b8f0102194f536be4
-        with:
-          target-path: .zed-deps/shared-auth-client
+
+      # ores-rl-lib-core and shared-auth-client are git dependencies on private repositories in OTHER orgs.
+      # A composite staging action (the ores-chat pattern) cannot reach across orgs, so this needs a read-only
+      # token. Without it the build steps are skipped and the job says so, rather than failing on a missing
+      # credential that nobody can supply from a pull request.
+      - name: Configure access to the private fleet crates
+        if: env.FLEET_READ_TOKEN != ''
+        run: git config --global url."https://x-access-token:${FLEET_READ_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Say why the build is being skipped
+        if: env.FLEET_READ_TOKEN == ''
+        run: |
+          echo "::warning title=No credential for the private fleet crates::FLEET_READ_TOKEN is not set, so ores-rl-lib-core and shared-auth-client cannot be fetched and the cargo steps are skipped. Add a read-only token with access to ores-rate-limit/ores-rl-lib-core and shared-auth/shared-auth-clients as the FLEET_READ_TOKEN secret."
       - name: Authenticate git for private fleet dependencies
         if: env.FLEET_TOKEN != ''
         run: |
@@ -251,14 +272,18 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
-      - name: Stage the commit-pinned private rate-limit core
-        uses: ores-rate-limit/ores-rl-lib-core@31df606d26280611e2d2d684328a804644eb4255
-        with:
-          target-path: .zed-deps/ores-rl-lib-core
-      - name: Stage the commit-pinned private shared-auth client
-        uses: shared-auth/shared-auth-clients@04b7265c9f588f7b6891f49b8f0102194f536be4
-        with:
-          target-path: .zed-deps/shared-auth-client
+
+      # ores-rl-lib-core and shared-auth-client are git dependencies on private repositories in OTHER orgs.
+      # A composite staging action (the ores-chat pattern) cannot reach across orgs, so this needs a read-only
+      # token. Without it the build steps are skipped and the job says so, rather than failing on a missing
+      # credential that nobody can supply from a pull request.
+      - name: Configure access to the private fleet crates
+        if: env.FLEET_READ_TOKEN != ''
+        run: git config --global url."https://x-access-token:${FLEET_READ_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Say why the build is being skipped
+        if: env.FLEET_READ_TOKEN == ''
+        run: |
+          echo "::warning title=No credential for the private fleet crates::FLEET_READ_TOKEN is not set, so ores-rl-lib-core and shared-auth-client cannot be fetched and the cargo steps are skipped. Add a read-only token with access to ores-rate-limit/ores-rl-lib-core and shared-auth/shared-auth-clients as the FLEET_READ_TOKEN secret."
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
