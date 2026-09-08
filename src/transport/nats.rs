@@ -77,10 +77,10 @@ pub struct PublishRequest {
     pub payload: Vec<u8>,
 }
 
-pub fn require_nats_url<'a>(
+pub fn require_nats_url(
     mode: InteractionMode,
-    url: Option<&'a str>,
-) -> Result<Option<&'a str>, NatsError> {
+    url: Option<&str>,
+) -> Result<Option<&str>, NatsError> {
     let trimmed = url.map(str::trim).filter(|value| !value.is_empty());
     match (mode, trimmed) {
         (InteractionMode::Nats, None) => Err(NatsError::MissingUrl),
@@ -169,11 +169,7 @@ fn valid_nats_url(value: &str) -> bool {
             || host.starts_with('['))
 }
 
-fn validate_identifier(
-    field: &'static str,
-    value: &str,
-    maximum: usize,
-) -> Result<(), NatsError> {
+fn validate_identifier(field: &'static str, value: &str, maximum: usize) -> Result<(), NatsError> {
     if value.is_empty()
         || value.len() > maximum
         || value.trim() != value

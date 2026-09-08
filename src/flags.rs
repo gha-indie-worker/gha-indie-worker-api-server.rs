@@ -109,7 +109,9 @@ mod tests {
         )
         .expect("nats url is a documented flag");
         assert!(
-            resolved.values().any(|value| value == "nats://127.0.0.1:4222"),
+            resolved
+                .values()
+                .any(|value| value == "nats://127.0.0.1:4222"),
             "resolved keys: {:?}",
             resolved.keys().collect::<Vec<_>>()
         );
