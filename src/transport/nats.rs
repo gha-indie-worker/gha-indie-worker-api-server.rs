@@ -4,4 +4,3 @@
 pub struct NatsListener {
     pub url: String,
 }
-

@@ -1,0 +1,52 @@
+name: API flags and repository governance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  rust-and-config:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out API candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: '1.90.0'
+          components: rustfmt, clippy
+
+      - name: Verify committed lock
+        run: cargo metadata --locked --format-version 1 >/dev/null
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Test without optional transports
+        run: cargo test --locked --no-default-features
+
+      - name: Test all features
+        run: cargo test --locked --all-features
+
+      - name: Run strict Clippy
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
+
+      - name: Verify secret-capable NATS configuration is not a public flag
+        run: |
+          set -euo pipefail
+          if grep -Fq '[flags.gha-indie-worker-nats-url]' .cli-flags.toml; then
+            echo 'NATS URL must not be declared as a public argv flag' >&2
+            exit 1
+          fi
+          if grep -Eq '^[[:space:]]*env[[:space:]]*=[[:space:]]*"GHA_INDIE_WORKER_NATS_URL"' .cli-flags.toml; then
+            echo 'NATS URL must remain environment-only' >&2
+            exit 1
+          fi
