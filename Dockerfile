@@ -30,7 +30,26 @@
 #
 #   `just docker-build` / `just docker-run` / `just docker-push` wrap all three.
 #
-# DEPENDENCIES — <function dep_note at 0xebdfad9225f0>
+# DEPENDENCIES — 0 crate(s) come from git remotes (Cargo.toml:
+# none) and 0 from zed-pkg (.zpkg.toml: none).
+# Git-sourced crates need the gh_token secret when private; the zed-pkg set is
+# resolved by pinned SHA-256 in Stage A with no credentials.
+#
+# RUN
+#
+#   docker run --rm -p 8080:8080 \
+#     -v "$PWD/env/enc/dev.env.enc:/run/secrets/app.env:ro" \
+#     -e SOPS_AGE_KEY="$(cat ~/.config/sops/age/keys.txt)" \
+#     ghcr.io/gha-indie-worker/gha-indie-worker-api-server:dev
+#
+# ores-sops contract (https://github.com/ORESoftware/ores-sops):
+#   env/enc/<name>.env.enc  — ciphertext, committed, MOUNTED at run time
+#   env/dec/<name>.env      — plaintext, gitignored, never enters the context
+# Decrypt at `docker run`, never at `docker build`. Unlike the earlier
+# feat/ores-sops-arm64-dockerfile variant this image does not bake
+# env/enc/*.env.enc into a layer: docs/consumer-boundary.md forbids ciphertext in
+# the build context (it would travel through build caches, provenance
+# attestations and every registry), so the ciphertext is bind-mounted instead.
 #
 # SECRETS — see the block above ENTRYPOINT, and ORESoftware/ores-sops
 # docs/consumer-boundary.md. Nothing is decrypted at build time.
@@ -38,7 +57,8 @@
 ########################################
 # Stage 0 — toolchain and cargo-chef
 ########################################
-FROM rust:1-bookworm AS chef
+# Pinned minor (not `rust:1`) so a toolchain bump is a reviewed diff, not drift.
+FROM rust:1.90-bookworm AS chef
 # git: dependencies are resolved from git remotes.
 # cmake, build-essential, perl: aws-lc-sys and ring, pulled in by rustls, build
 # native code. pkg-config and libssl-dev cover any transitive openssl-sys.
