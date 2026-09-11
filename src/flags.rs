@@ -120,7 +120,10 @@ mod tests {
             [(NATS_URL_ENV.to_owned(), credentialed.to_owned())],
         )
         .expect("environment-only NATS URL");
-        assert_eq!(resolved.get(NATS_URL_ENV).map(String::as_str), Some(credentialed));
+        assert_eq!(
+            resolved.get(NATS_URL_ENV).map(String::as_str),
+            Some(credentialed)
+        );
 
         let error = resolve_from(
             &[
