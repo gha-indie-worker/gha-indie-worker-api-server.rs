@@ -21,8 +21,11 @@ jobs:
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
         with:
-          toolchain: stable
+          toolchain: '1.90.0'
           components: rustfmt, clippy
+
+      - name: Verify committed lock
+        run: cargo metadata --locked --format-version 1 >/dev/null
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -36,14 +39,14 @@ jobs:
       - name: Run strict Clippy
         run: cargo clippy --all-targets --all-features --locked -- -D warnings
 
-      - name: Check out pinned ores-cli governance runtime
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: ORESoftware/ores-cli
-          ref: e488618973f8400a8fc8b6f98ecc870c7ba12e39
-          path: .ores-cli
-          persist-credentials: false
-
-      - name: Audit repository and flags-2-env contract with ores-cli
-        working-directory: .ores-cli
-        run: cargo run --locked --bin oresc -- audit repo --path "$GITHUB_WORKSPACE"
+      - name: Verify secret-capable NATS configuration stays environment-only
+        run: |
+          set -euo pipefail
+          if grep -Eq '^\[flags\..*nats|GHA_INDIE_WORKER_NATS_URL' .cli-flags.toml; then
+            echo 'NATS URL must not be declared as a public argv flag' >&2
+            exit 1
+          fi
+          if grep -Eq 'parsed\.dotenv|dotenv_overrides' src/flags.rs; then
+            echo 'plaintext dotenv must not enter runtime resolution' >&2
+            exit 1
+          fi
