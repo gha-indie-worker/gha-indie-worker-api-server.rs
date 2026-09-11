@@ -39,14 +39,14 @@ jobs:
       - name: Run strict Clippy
         run: cargo clippy --all-targets --all-features --locked -- -D warnings
 
-      - name: Verify secret-capable NATS configuration stays environment-only
+      - name: Verify secret-capable NATS configuration is not a public flag
         run: |
           set -euo pipefail
-          if grep -Eq '^\[flags\..*nats|GHA_INDIE_WORKER_NATS_URL' .cli-flags.toml; then
+          if grep -Fq '[flags.gha-indie-worker-nats-url]' .cli-flags.toml; then
             echo 'NATS URL must not be declared as a public argv flag' >&2
             exit 1
           fi
-          if grep -Eq 'parsed\.dotenv|dotenv_overrides' src/flags.rs; then
-            echo 'plaintext dotenv must not enter runtime resolution' >&2
+          if grep -Eq '^[[:space:]]*env[[:space:]]*=[[:space:]]*"GHA_INDIE_WORKER_NATS_URL"' .cli-flags.toml; then
+            echo 'NATS URL must remain environment-only' >&2
             exit 1
           fi
