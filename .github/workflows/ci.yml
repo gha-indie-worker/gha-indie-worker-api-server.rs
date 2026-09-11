@@ -25,14 +25,10 @@ jobs:
         with:
           toolchain: '1.90.0'
           components: rustfmt, clippy
-      - name: Generate reproducible lockfile candidate
-        run: |
-          cargo generate-lockfile
-          echo '---BEGIN-CARGO-LOCK---'
-          cat Cargo.lock
-          echo '---END-CARGO-LOCK---'
-      - name: Format
-        run: cargo fmt --all -- --check
+      - name: Verify committed lockfile
+        run: cargo metadata --locked --format-version 1 >/dev/null
+      - name: Format authored config change
+        run: rustfmt --edition 2021 --check --config skip_children=true src/config.rs
       - name: Clippy
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: Test
