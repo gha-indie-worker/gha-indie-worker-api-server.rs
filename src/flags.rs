@@ -1,6 +1,7 @@
 //! Fail-closed argv and environment resolution through flags-2-env.
 
 use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::io::Write;
 
 use flags2env::BundledFlags2Env;
@@ -10,7 +11,37 @@ const CONTRACT: &str = include_str!("../.cli-flags.toml");
 const NATS_URL_ENV: &str = "GHA_INDIE_WORKER_NATS_URL";
 
 pub fn resolve() -> Result<BTreeMap<String, String>, String> {
-    resolve_from(&std::env::args().collect::<Vec<_>>(), std::env::vars())
+    let argv = utf8_arguments(std::env::args_os())?;
+    let environment = utf8_environment(std::env::vars_os())?;
+    resolve_from(&argv, environment)
+}
+
+fn utf8_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<Vec<String>, String> {
+    arguments
+        .into_iter()
+        .map(|argument| {
+            argument
+                .into_string()
+                .map_err(|_| "command-line arguments must be valid UTF-8".to_owned())
+        })
+        .collect()
+}
+
+fn utf8_environment(
+    environment: impl IntoIterator<Item = (OsString, OsString)>,
+) -> Result<BTreeMap<String, String>, String> {
+    environment
+        .into_iter()
+        .map(|(name, value)| {
+            let name = name
+                .into_string()
+                .map_err(|_| "environment variable names must be valid UTF-8".to_owned())?;
+            let value = value
+                .into_string()
+                .map_err(|_| "environment variable values must be valid UTF-8".to_owned())?;
+            Ok((name, value))
+        })
+        .collect()
 }
 
 fn resolve_from(
@@ -113,6 +144,28 @@ mod tests {
     }
 
     #[test]
+    fn public_bind_flag_overrides_environment() {
+        let resolved = resolve_from(
+            &[
+                "server".to_owned(),
+                "--gha-indie-worker-api-bind=127.0.0.1:9090".to_owned(),
+            ],
+            [(
+                "GHA_INDIE_WORKER_API_BIND".to_owned(),
+                "127.0.0.1:8080".to_owned(),
+            )],
+        )
+        .expect("public bind override");
+
+        assert_eq!(
+            resolved
+                .get("GHA_INDIE_WORKER_API_BIND")
+                .map(String::as_str),
+            Some("127.0.0.1:9090")
+        );
+    }
+
+    #[test]
     fn nats_url_is_environment_only() {
         let credentialed = "nats://worker:synthetic-credential@nats.internal:4222";
         let resolved = resolve_from(
@@ -138,10 +191,38 @@ mod tests {
     }
 
     #[test]
+    fn blank_nats_url_is_not_materialized() {
+        let resolved = resolve_from(
+            &["server".to_owned()],
+            [(NATS_URL_ENV.to_owned(), "   ".to_owned())],
+        )
+        .expect("blank NATS URL");
+
+        assert!(!resolved.contains_key(NATS_URL_ENV));
+    }
+
+    #[test]
     fn plaintext_dotenv_is_not_a_runtime_source() {
         const SOURCE: &str = include_str!("flags.rs");
         let production = SOURCE.split("#[cfg(test)]").next().unwrap_or(SOURCE);
         assert!(!production.contains("parsed.dotenv"));
         assert!(!production.contains("dotenv_overrides"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn invalid_utf8_process_inputs_fail_closed_without_panicking() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let bad = OsString::from_vec(vec![0xff]);
+        assert_eq!(
+            utf8_arguments([bad.clone()]).expect_err("invalid argv must fail"),
+            "command-line arguments must be valid UTF-8"
+        );
+        assert_eq!(
+            utf8_environment([(OsString::from("KEY"), bad)])
+                .expect_err("invalid env value must fail"),
+            "environment variable values must be valid UTF-8"
+        );
     }
 }
