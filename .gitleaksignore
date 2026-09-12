@@ -1,0 +1,6 @@
+# gitleaks false positives, pinned by exact fingerprint (commit:file:rule:line).
+#
+# src/routes/v1/orgs.rs:278 is the unit-test fixture "0123456789abcdef" (the hex
+# counting sequence) used to check that token digests are stable; it is
+# compared against "0123456789abcdee" on the next line. Not a credential.
+4ee003ce71918d1d7d255be83397f3517c775411:src/routes/v1/orgs.rs:generic-api-key:278
