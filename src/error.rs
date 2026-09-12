@@ -9,4 +9,3 @@ pub enum ApiError {
     #[error("forbidden")]
     Forbidden,
 }
-

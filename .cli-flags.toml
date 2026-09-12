@@ -1,4 +1,10 @@
 # flags-2-env surface for `ghaiw-api`
+[help]
+url = "https://github.com/gha-indie-worker/gha-indie-worker-api-server.rs"
+
+[parse]
+allow_unknown = false
+
 [flags.config]
 env = "GHA_INDIE_WORKER_CONFIG"
 long = "config"
@@ -15,21 +21,21 @@ long = "json"
 switch = true
 help = "Emit JSON"
 
-
-[flags.gha-indie-worker-api-bind]
+[flags.bind]
 env = "GHA_INDIE_WORKER_API_BIND"
-long = "gha-indie-worker-api-bind"
+aliases = ["bind", "gha-indie-worker-api-bind"]
 type = "string"
-help = "Runtime environment key GHA_INDIE_WORKER_API_BIND."
+default = "127.0.0.1:8080"
+help = "HTTP bind address."
 
-[flags.gha-indie-worker-api-tcp-bind]
+[flags.tcp-bind]
 env = "GHA_INDIE_WORKER_API_TCP_BIND"
-long = "gha-indie-worker-api-tcp-bind"
+aliases = ["tcp-bind", "gha-indie-worker-api-tcp-bind"]
 type = "string"
-help = "Runtime environment key GHA_INDIE_WORKER_API_TCP_BIND."
+help = "Optional stateful TCP bind address."
 
-[flags.gha-indie-worker-nats-url]
+[flags.nats-url]
 env = "GHA_INDIE_WORKER_NATS_URL"
-long = "gha-indie-worker-nats-url"
+aliases = ["nats-url", "gha-indie-worker-nats-url"]
 type = "string"
-help = "Runtime environment key GHA_INDIE_WORKER_NATS_URL."
+help = "Optional NATS URL."

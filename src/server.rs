@@ -10,4 +10,3 @@ pub fn run(config: &ApiConfig) {
         serde_json::to_string(&routes::health::body()).expect("health json")
     );
 }
-
