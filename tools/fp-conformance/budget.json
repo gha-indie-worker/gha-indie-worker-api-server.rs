@@ -1,0 +1,13 @@
+{
+  "budget": {
+    "RS003": 1
+  },
+  "stats": {
+    "dart": 0,
+    "files": 14,
+    "lines": 156,
+    "rust": 14,
+    "ts": 0
+  },
+  "version": "1.0.0"
+}
