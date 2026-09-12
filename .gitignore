@@ -29,3 +29,5 @@ tmp
 temp
 tmp/worktrees
 temp/worktrees
+# typespec-json-schema-validator comparison evidence (generated; never an authority)
+.typespec-json-schema-validator/
