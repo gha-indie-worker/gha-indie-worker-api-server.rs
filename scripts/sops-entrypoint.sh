@@ -38,7 +38,8 @@ secrets=$(sops --decrypt --input-type dotenv --output-type dotenv "$SOPS_SECRETS
 }
 
 # Parsed with read + export, never eval. Split on the first '=' only so
-# URLs, base64 and JWTs stay intact. Orchestrator-set variables win.
+# URLs, base64 and JWTs stay intact. Orchestrator-set variables win
+# (including OTEL_* set by the Deployment / this image's ENV).
 while IFS='=' read -r key value; do
   case "$key" in
     '' | '#'* | sops_*) continue ;;
