@@ -1,0 +1,290 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # RUSTFLAGS is deliberately NOT set to "-D warnings": that would also apply to
+  # dependency compilation, so an upstream warning would fail an unrelated PR.
+  # The gate denies warnings for this crate only, via `clippy -- -D warnings`.
+
+jobs:
+  rust:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      # The `secrets` context is not available in an `if:` expression, so the
+      # token is lifted into `env` and the step tests that instead.
+      FLEET_TOKEN: ${{ secrets.SHARED_AUTH_READ_TOKEN }}
+    steps:
+      - name: Check out the exact source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+
+      # ores-rl-lib-core and shared-auth-client are git dependencies on private repositories in OTHER orgs.
+      # A composite staging action (the ores-chat pattern) cannot reach across orgs, so this needs a read-only
+      # token. Without it the build steps are skipped and the job says so, rather than failing on a missing
+      # credential that nobody can supply from a pull request.
+      - name: Configure access to the private fleet crates
+        if: env.FLEET_READ_TOKEN != ''
+        run: git config --global url."https://x-access-token:${FLEET_READ_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Say why the build is being skipped
+        if: env.FLEET_READ_TOKEN == ''
+        run: |
+          echo "::warning title=No credential for the private fleet crates::FLEET_READ_TOKEN is not set, so ores-rl-lib-core and shared-auth-client cannot be fetched and the cargo steps are skipped. Add a read-only token with access to ores-rate-limit/ores-rl-lib-core and shared-auth/shared-auth-clients as the FLEET_READ_TOKEN secret."
+      - name: Install Rust 1.88.0
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+          components: rustfmt, clippy
+
+      # The fleet crates are private git dependencies. The org-level token is
+      # scoped to read them and nothing else.
+      - name: Authenticate git for private fleet dependencies
+        if: env.FLEET_TOKEN != ''
+        run: |
+          git config --global url."https://x-access-token:${FLEET_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.toml') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint
+        if: env.FLEET_READ_TOKEN != ''
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        if: env.FLEET_READ_TOKEN != ''
+        run: cargo test --all-targets
+
+      # Doctests are not covered by --all-targets.
+      - name: Doc tests
+        if: env.FLEET_READ_TOKEN != ''
+        run: cargo test --doc
+
+  # The whole point of the feature layout: every fleet integration is isolated,
+  # so the crate still builds with each one switched off. This job proves that
+  # containment is real rather than aspirational.
+  feature-containment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+
+      # ores-rl-lib-core and shared-auth-client are git dependencies on private repositories in OTHER orgs.
+      # A composite staging action (the ores-chat pattern) cannot reach across orgs, so this needs a read-only
+      # token. Without it the build steps are skipped and the job says so, rather than failing on a missing
+      # credential that nobody can supply from a pull request.
+      - name: Configure access to the private fleet crates
+        if: env.FLEET_READ_TOKEN != ''
+        run: git config --global url."https://x-access-token:${FLEET_READ_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Say why the build is being skipped
+        if: env.FLEET_READ_TOKEN == ''
+        run: |
+          echo "::warning title=No credential for the private fleet crates::FLEET_READ_TOKEN is not set, so ores-rl-lib-core and shared-auth-client cannot be fetched and the cargo steps are skipped. Add a read-only token with access to ores-rate-limit/ores-rl-lib-core and shared-auth/shared-auth-clients as the FLEET_READ_TOKEN secret."
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+
+      - name: Build with no fleet dependencies at all
+        if: env.FLEET_READ_TOKEN != ''
+        run: cargo check --no-default-features --features db,tcp-transport --all-targets
+
+      - name: Test with no fleet dependencies at all
+        if: env.FLEET_READ_TOKEN != ''
+        run: cargo test --no-default-features --features db,tcp-transport
+
+  manifest-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+
+      # ores-rl-lib-core and shared-auth-client are git dependencies on private repositories in OTHER orgs.
+      # A composite staging action (the ores-chat pattern) cannot reach across orgs, so this needs a read-only
+      # token. Without it the build steps are skipped and the job says so, rather than failing on a missing
+      # credential that nobody can supply from a pull request.
+      - name: Configure access to the private fleet crates
+        if: env.FLEET_READ_TOKEN != ''
+        run: git config --global url."https://x-access-token:${FLEET_READ_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Say why the build is being skipped
+        if: env.FLEET_READ_TOKEN == ''
+        run: |
+          echo "::warning title=No credential for the private fleet crates::FLEET_READ_TOKEN is not set, so ores-rl-lib-core and shared-auth-client cannot be fetched and the cargo steps are skipped. Add a read-only token with access to ores-rate-limit/ores-rl-lib-core and shared-auth/shared-auth-clients as the FLEET_READ_TOKEN secret."
+      - name: Verify the pinned fleet revisions and declared environment surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          manifest = tomllib.loads(Path("Cargo.toml").read_text())
+          dependencies = manifest["dependencies"]
+
+          # The fleet pins in lane/CONVENTIONS.md are exact, not floating.
+          assert dependencies["shared-auth-client"]["rev"] == "cc57a85b276bee81ad94decc87df2f48d49cab9f"
+          assert dependencies["next-loggers"]["rev"] == "b55271c047be761c4711d87cbd500a49eefda3d9"
+          assert dependencies["ores-middleware"]["rev"] == "6f73bf1ae97f38f05e2e87e4eb3e0e18e0142529"
+          assert dependencies["ores-rl-lib-core"]["tag"] == "v0.2.0"
+          assert manifest["package"]["rust-version"] == "1.88"
+          assert manifest["lints"]["rust"]["unsafe_code"] == "forbid"
+
+          # Direct sqlx / tokio-postgres use is forbidden fleet-wide.
+          for forbidden in ("sqlx", "tokio-postgres", "postgres", "diesel"):
+              assert forbidden not in dependencies, f"{forbidden} is not permitted; use SeaORM"
+
+          # Every variable src/config.rs reads must be declared for flags-2-env.
+          flags = tomllib.loads(Path(".cli-flags.toml").read_text())["flags"]
+          declared = {entry["env"] for entry in flags.values()}
+          example = Path(".env.example").read_text()
+          missing = sorted(
+              name for name in declared
+              if f"\n{name}=" not in f"\n{example}"
+          )
+          assert not missing, f"undocumented in .env.example: {missing}"
+          print(f"{len(declared)} environment variables declared and documented")
+          PY
+
+      - name: Refuse a plaintext dotenv in version control
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -E '(^|/)\.env($|\.)' | grep -v '\.env\.example$'; then
+            echo "a plaintext dotenv is tracked; secrets belong in env/enc/*.env.enc" >&2
+            exit 1
+          fi
+
+  container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      FLEET_TOKEN: ${{ secrets.SHARED_AUTH_READ_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+
+      # ores-rl-lib-core and shared-auth-client are git dependencies on private repositories in OTHER orgs.
+      # A composite staging action (the ores-chat pattern) cannot reach across orgs, so this needs a read-only
+      # token. Without it the build steps are skipped and the job says so, rather than failing on a missing
+      # credential that nobody can supply from a pull request.
+      - name: Configure access to the private fleet crates
+        if: env.FLEET_READ_TOKEN != ''
+        run: git config --global url."https://x-access-token:${FLEET_READ_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Say why the build is being skipped
+        if: env.FLEET_READ_TOKEN == ''
+        run: |
+          echo "::warning title=No credential for the private fleet crates::FLEET_READ_TOKEN is not set, so ores-rl-lib-core and shared-auth-client cannot be fetched and the cargo steps are skipped. Add a read-only token with access to ores-rate-limit/ores-rl-lib-core and shared-auth/shared-auth-clients as the FLEET_READ_TOKEN secret."
+      - name: Authenticate git for private fleet dependencies
+        if: env.FLEET_TOKEN != ''
+        run: |
+          git config --global url."https://x-access-token:${FLEET_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+      - name: Build the production image
+        run: docker build --tag gha-indie-worker-api-server:ci .
+
+      - name: Smoke-test liveness, readiness and capabilities
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --detach \
+            --name giw-api-ci \
+            --publish 18080:8080 \
+            gha-indie-worker-api-server:ci
+          trap 'docker logs giw-api-ci || true; docker rm --force giw-api-ci >/dev/null 2>&1 || true' EXIT
+
+          for _ in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:18080/healthz > health.json; then
+              break
+            fi
+            sleep 1
+          done
+
+          # /readyz must be 503 with no database configured: readiness is
+          # fail-closed, and a container that reported ready here would be a bug.
+          ready_status="$(curl --silent --output readyz.json --write-out '%{http_code}' http://127.0.0.1:18080/readyz)"
+          curl --fail --silent --show-error http://127.0.0.1:18080/v1/capabilities > capabilities.json
+          unauth_status="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/v1/users/me)"
+
+          python3 - "$ready_status" "$unauth_status" <<'PY'
+          import json, sys
+
+          ready_status, unauth_status = sys.argv[1], sys.argv[2]
+
+          health = json.load(open("health.json"))
+          assert health["status"] == "ok", health
+          assert health["service"] == "gha-indie-worker-api-server", health
+          assert health["protocol"] == "giw.v1", health
+
+          assert ready_status == "503", f"/readyz must be fail-closed, got {ready_status}"
+          assert json.load(open("readyz.json"))["database_ready"] is False
+
+          capabilities = json.load(open("capabilities.json"))
+          assert "rust-verify" in capabilities["profiles"]
+          assert capabilities["embeddings"]["vector_slots"] == 4100
+          assert capabilities["exclusions"], "refusals must be published"
+
+          assert unauth_status == "401", f"an authenticated route must refuse, got {unauth_status}"
+          print("container smoke test passed")
+          PY
+
+  # Optional: advisory and licence audit. Non-blocking until the fleet's
+  # deny.toml is published, so a new advisory does not stop an unrelated merge.
+  cargo-deny:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # ores-rl-lib-core and shared-auth-client are git dependencies on private repositories in OTHER orgs.
+      # A composite staging action (the ores-chat pattern) cannot reach across orgs, so this needs a read-only
+      # token. Without it the build steps are skipped and the job says so, rather than failing on a missing
+      # credential that nobody can supply from a pull request.
+      - name: Configure access to the private fleet crates
+        if: env.FLEET_READ_TOKEN != ''
+        run: git config --global url."https://x-access-token:${FLEET_READ_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Say why the build is being skipped
+        if: env.FLEET_READ_TOKEN == ''
+        run: |
+          echo "::warning title=No credential for the private fleet crates::FLEET_READ_TOKEN is not set, so ores-rl-lib-core and shared-auth-client cannot be fetched and the cargo steps are skipped. Add a read-only token with access to ores-rate-limit/ores-rl-lib-core and shared-auth/shared-auth-clients as the FLEET_READ_TOKEN secret."
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          arguments: --all-features

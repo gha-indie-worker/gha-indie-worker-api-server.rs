@@ -1,7 +1,24 @@
+org = "gha-indie-worker"
 name = "gha-indie-worker-api-server.rs"
 kind = "api-server"
+language = "rust"
 version = "0.1.0"
+description = "JSON API server for GHA Indie Worker (api.indiebuild.dev)"
 
 [dependencies]
+# Contracts and shared query/entity boundaries.
+"gha-indie-worker/gha-indie-worker-interfaces" = "^0.1.0"
 "gha-indie-worker/gha-indie-worker-lib-core" = "^0.1.0"
 "gha-indie-worker/gha-indie-worker-orm-core" = "^0.1.0"
+# Federated authentication.
+"shared-auth/shared-auth-clients" = "^0.1.0"
+# The portable middleware stack.
+"oresoftware/ores-middleware" = "^1.0.0"
+# Deterministic rate-limit primitives.
+"ores-rate-limit/ores-rl-lib-core" = "^0.2.0"
+# Structured logging bridged into tracing.
+"ores-otel/ores.otel.log" = "^0.1.0"
+# Causal sync envelopes.
+"opto-sync/opto-sync-lib" = "^0.1.0"
+# Chat surfaces proxied by /v1/chat/*.
+"ores-chat/ores-chat-clients" = "^0.1.0"
