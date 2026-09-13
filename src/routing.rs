@@ -55,10 +55,10 @@ impl Default for RouterConfig {
 }
 
 impl RouterConfig {
-    pub fn resolve(&self, host: &str, path: &str) -> Result<RouteTarget, RoutingError> {
-        self.resolve_subdomain(host, path)
+    pub fn resolve(&self, host: &str, path_and_query: &str) -> Result<RouteTarget, RoutingError> {
+        self.resolve_subdomain(host, path_and_query)
             .or_else(|subdomain_error| match subdomain_error {
-                RoutingError::UnsupportedHost => self.resolve_subpath(path),
+                RoutingError::UnsupportedHost => self.resolve_subpath(path_and_query),
                 other => Err(other),
             })
     }
@@ -66,7 +66,7 @@ impl RouterConfig {
     pub fn resolve_subdomain(
         &self,
         host: &str,
-        path: &str,
+        path_and_query: &str,
     ) -> Result<RouteTarget, RoutingError> {
         let host = strip_port(host)?.trim_end_matches('.');
         let suffix = self.domain_suffix.trim_matches('.');
@@ -92,11 +92,12 @@ impl RouterConfig {
             project: project.to_owned(),
             session: session.to_owned(),
             service: service.to_owned(),
-            upstream_path: normalize_upstream_path(path),
+            upstream_path: normalize_upstream_path(path_and_query),
         })
     }
 
-    pub fn resolve_subpath(&self, path: &str) -> Result<RouteTarget, RoutingError> {
+    pub fn resolve_subpath(&self, path_and_query: &str) -> Result<RouteTarget, RoutingError> {
+        let (path, query) = split_path_and_query(path_and_query);
         let prefix = self.path_prefix.trim_end_matches('/');
         let remainder = path
             .strip_prefix(prefix)
@@ -113,15 +114,17 @@ impl RouterConfig {
         validate_label(session, RoutingError::MissingSession)?;
         validate_label(service, RoutingError::MissingService)?;
 
+        let upstream_path = if tail.is_empty() {
+            "/".to_owned()
+        } else {
+            format!("/{tail}")
+        };
+
         Ok(RouteTarget {
             project: project.to_owned(),
             session: session.to_owned(),
             service: service.to_owned(),
-            upstream_path: if tail.is_empty() {
-                "/".to_owned()
-            } else {
-                format!("/{tail}")
-            },
+            upstream_path: append_query(upstream_path, query),
         })
     }
 }
@@ -139,7 +142,8 @@ fn validate_label(value: &str, missing: RoutingError) -> Result<(), RoutingError
     if value.is_empty() {
         return Err(missing);
     }
-    if value.starts_with('-')
+    if value.len() > 63
+        || value.starts_with('-')
         || value.ends_with('-')
         || !value
             .bytes()
@@ -150,13 +154,27 @@ fn validate_label(value: &str, missing: RoutingError) -> Result<(), RoutingError
     Ok(())
 }
 
-fn normalize_upstream_path(path: &str) -> String {
-    if path.is_empty() {
+fn split_path_and_query(path_and_query: &str) -> (&str, Option<&str>) {
+    match path_and_query.split_once('?') {
+        Some((path, query)) => (path, Some(query)),
+        None => (path_and_query, None),
+    }
+}
+
+fn append_query(path: String, query: Option<&str>) -> String {
+    match query {
+        Some(query) => format!("{path}?{query}"),
+        None => path,
+    }
+}
+
+fn normalize_upstream_path(path_and_query: &str) -> String {
+    if path_and_query.is_empty() {
         "/".to_owned()
-    } else if path.starts_with('/') {
-        path.to_owned()
+    } else if path_and_query.starts_with('/') {
+        path_and_query.to_owned()
     } else {
-        format!("/{path}")
+        format!("/{path_and_query}")
     }
 }
 
@@ -212,6 +230,28 @@ mod tests {
     }
 
     #[test]
+    fn preserves_query_when_path_route_targets_service_root() {
+        let route = RouterConfig::default()
+            .resolve("localhost", "/p/zed-pkg/pr-481/api?limit=20&cursor=abc")
+            .unwrap();
+
+        assert_eq!(route.service, "api");
+        assert_eq!(route.upstream_path, "/?limit=20&cursor=abc");
+    }
+
+    #[test]
+    fn preserves_query_when_rewriting_path_route() {
+        let route = RouterConfig::default()
+            .resolve(
+                "localhost",
+                "/p/zed-pkg/pr-481/api/v1/packages?limit=20",
+            )
+            .unwrap();
+
+        assert_eq!(route.upstream_path, "/v1/packages?limit=20");
+    }
+
+    #[test]
     fn path_root_is_forwarded_as_root() {
         let route = RouterConfig::default()
             .resolve("localhost", "/p/fiducia-cloud/dev/api")
@@ -228,5 +268,16 @@ mod tests {
         );
 
         assert_eq!(result, Err(RoutingError::InvalidHost));
+    }
+
+    #[test]
+    fn rejects_dns_labels_over_sixty_three_bytes() {
+        let too_long = "a".repeat(64);
+        let host = format!("api.{too_long}.pr-1.local.indiebuild.dev");
+
+        assert_eq!(
+            RouterConfig::default().resolve(&host, "/"),
+            Err(RoutingError::InvalidHost)
+        );
     }
 }
