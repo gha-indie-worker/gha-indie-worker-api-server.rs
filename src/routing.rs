@@ -179,19 +179,19 @@ impl RouterConfig {
 
     fn path_fallback_host_allowed(&self, host: &str) -> Result<bool, RoutingError> {
         let host = canonical_host(host)?;
-        self.path_fallback_hosts.iter().try_fold(false, |matched, allowed| {
-            if matched {
-                return Ok(true);
-            }
-            Ok(canonical_host(allowed)? == host)
-        })
+        self.path_fallback_hosts
+            .iter()
+            .try_fold(false, |matched, allowed| {
+                if matched {
+                    return Ok(true);
+                }
+                Ok(canonical_host(allowed)? == host)
+            })
     }
 }
 
 fn canonical_host(host: &str) -> Result<String, RoutingError> {
-    let name = strip_port(host)?
-        .trim_end_matches('.')
-        .to_ascii_lowercase();
+    let name = strip_port(host)?.trim_end_matches('.').to_ascii_lowercase();
     if name.is_empty() || name.len() > 253 || name.bytes().any(|byte| byte.is_ascii_control()) {
         return Err(RoutingError::InvalidHost);
     }
@@ -270,7 +270,10 @@ fn validate_request_target(path_and_query: &str) -> Result<(), RoutingError> {
     }
 
     let (path, _) = split_path_and_query(path_and_query);
-    if path.split('/').any(|segment| segment == "." || segment == "..") {
+    if path
+        .split('/')
+        .any(|segment| segment == "." || segment == "..")
+    {
         return Err(RoutingError::InvalidPath);
     }
 
@@ -366,10 +369,7 @@ mod tests {
     #[test]
     fn arbitrary_hosts_cannot_use_path_fallback() {
         assert_eq!(
-            RouterConfig::default().resolve(
-                "attacker.example",
-                "/p/zed-pkg/pr-481/api/healthz",
-            ),
+            RouterConfig::default().resolve("attacker.example", "/p/zed-pkg/pr-481/api/healthz",),
             Err(RoutingError::UnsupportedHost)
         );
     }
@@ -377,7 +377,9 @@ mod tests {
     #[test]
     fn configured_gateway_can_use_path_fallback() {
         let mut config = RouterConfig::default();
-        config.path_fallback_hosts.push("gateway.indiebuild.dev".into());
+        config
+            .path_fallback_hosts
+            .push("gateway.indiebuild.dev".into());
         let route = config
             .resolve(
                 "gateway.indiebuild.dev:443",
@@ -398,10 +400,7 @@ mod tests {
     #[test]
     fn rejects_ambiguous_or_invalid_labels() {
         assert_eq!(
-            RouterConfig::default().resolve(
-                "api.bad_project.pr-1.local.indiebuild.dev",
-                "/",
-            ),
+            RouterConfig::default().resolve("api.bad_project.pr-1.local.indiebuild.dev", "/",),
             Err(RoutingError::InvalidHost)
         );
     }
