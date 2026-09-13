@@ -6,4 +6,3 @@ fn main() {
     let cfg = ApiConfig::from_env();
     server::run(&cfg);
 }
-
