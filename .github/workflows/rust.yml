@@ -3,7 +3,11 @@ name: rust
 on:
   pull_request:
   push:
-    branches: [main]
+    branches:
+      - main
+      - 'feat/**'
+      - 'fix/**'
+      - 'chore/**'
 
 permissions:
   contents: read
