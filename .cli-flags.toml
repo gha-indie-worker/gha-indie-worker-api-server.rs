@@ -15,7 +15,6 @@ long = "json"
 switch = true
 help = "Emit JSON"
 
-
 [flags.gha-indie-worker-api-bind]
 env = "GHA_INDIE_WORKER_API_BIND"
 long = "gha-indie-worker-api-bind"
@@ -33,3 +32,17 @@ env = "GHA_INDIE_WORKER_NATS_URL"
 long = "gha-indie-worker-nats-url"
 type = "string"
 help = "Runtime environment key GHA_INDIE_WORKER_NATS_URL."
+
+[flags.gha-indie-worker-routing-domain-suffix]
+env = "GHA_INDIE_WORKER_ROUTING_DOMAIN_SUFFIX"
+long = "gha-indie-worker-routing-domain-suffix"
+type = "string"
+default = "local.indiebuild.dev"
+help = "DNS suffix used for service.project.session ingress routing."
+
+[flags.gha-indie-worker-routing-path-prefix]
+env = "GHA_INDIE_WORKER_ROUTING_PATH_PREFIX"
+long = "gha-indie-worker-routing-path-prefix"
+type = "string"
+default = "/p"
+help = "Fallback URL prefix used for /p/project/session/service routing."
