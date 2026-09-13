@@ -46,3 +46,10 @@ long = "gha-indie-worker-routing-path-prefix"
 type = "string"
 default = "/p"
 help = "Fallback URL prefix used for /p/project/session/service routing."
+
+[flags.gha-indie-worker-routing-path-hosts]
+env = "GHA_INDIE_WORKER_ROUTING_PATH_HOSTS"
+long = "gha-indie-worker-routing-path-hosts"
+type = "string"
+default = "localhost,127.0.0.1,::1"
+help = "Comma-separated host allowlist permitted to use fallback path routing."
