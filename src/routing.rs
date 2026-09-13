@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter};
 
 pub const DEFAULT_ROUTING_SUFFIX: &str = "local.indiebuild.dev";
 pub const DEFAULT_PATH_PREFIX: &str = "/p";
-pub const DEFAULT_PATH_FALLBACK_HOSTS: &[&str] = &["localhost", "127.0.0.1", "::1"];
+pub const DEFAULT_PATH_FALLBACK_HOSTS: &[&str] = &["localhost", "127.0.0.1", "[::1]"];
 pub const MAX_REQUEST_TARGET_BYTES: usize = 8 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
