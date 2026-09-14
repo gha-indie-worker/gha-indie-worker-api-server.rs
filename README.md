@@ -20,7 +20,7 @@ web.zed-pkg.pr-481.local.indiebuild.dev/
 admin-api.zed-pkg.pr-481.local.indiebuild.dev/healthz
 ```
 
-Fallback path routing works with a plain localhost or tunnel hostname:
+Fallback path routing works with a plain localhost or explicitly admitted tunnel hostname:
 
 ```text
 /p/<project>/<session>/<service>/<path>
@@ -32,7 +32,20 @@ For example:
 http://127.0.0.1:8080/p/zed-pkg/pr-481/api/v1/packages
 ```
 
-`src/routing.rs` resolves both forms into a typed `RouteTarget`. `src/ingress.rs` then asks a `ProjectRuntime` to ensure the requested `(project, session)` is running and returns a `ProxyPlan` pointing at that session's Rust load balancer. The plan carries `x-ores-project`, `x-ores-session`, and `x-ores-service` headers so the project load balancer can select the correct logical service while `ores-compose` remains free to use dynamic ports, Unix sockets, Docker networks, Podman/other OCI networks, or host processes internally.
+`src/routing.rs` resolves both forms into a typed `RouteTarget`. `src/ingress.rs` admits the logical route before any lazy-start side effect, then asks a `ProjectRuntime` to ensure the requested `(project, session)` is running.
+
+The returned `ProjectIngress` is validated before it can become a `ProxyPlan`:
+
+- the supervisor generation must be nonzero;
+- TCP endpoints must be nonzero loopback addresses;
+- Unix-domain sockets must be absolute, traversal-free, and below the trusted runtime root;
+- unrelated local sockets such as `/var/run/docker.sock` are rejected.
+
+The proxy plan carries trusted `x-ores-project`, `x-ores-session`, `x-ores-service`, and `x-ores-generation` metadata. Incoming hop-by-hop, forwarding, Cloudflare identity, and `x-ores-*` headers are stripped case-insensitively before trusted metadata is added. Header count and aggregate bytes are bounded, and CR/LF/NUL injection fails closed.
+
+Forwarding headers are rebuilt only from transport-observed context. Client-provided `x-forwarded-*` values are never treated as authority.
+
+Runtime selection remains behind the trusted compose/worker boundary. Public ingress cannot choose Docker vs Podman/containerd/native execution, an executable path, a network provider, a container/private address, or a host port. That policy belongs to `.ores-compose.yaml`, the supervisor capability snapshot, and the worker scheduler.
 
 The default routing suffix and path prefix are configurable with:
 
@@ -41,4 +54,8 @@ GHA_INDIE_WORKER_ROUTING_DOMAIN_SUFFIX=local.indiebuild.dev
 GHA_INDIE_WORKER_ROUTING_PATH_PREFIX=/p
 ```
 
-Cloudflare is intentionally an outer adapter rather than an authority for project routing: the same resolver is used for tunneled traffic and direct laptop traffic.
+Cloudflare is intentionally an outer adapter rather than an authority for project routing: the same resolver and trust checks are used for tunneled traffic and direct laptop traffic.
+
+## Verification
+
+The Rust workflow checks the exact revision with locked dependency metadata, formatter checks, all-target/all-feature Clippy with warnings denied, all-feature tests, documentation tests, and no-default-feature tests. A workflow job that never executes repository steps is not considered verification evidence.
