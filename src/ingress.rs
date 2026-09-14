@@ -2,7 +2,7 @@
 
 use crate::routing::{RouteTarget, RouterConfig, RoutingError};
 use std::net::SocketAddr;
-use std::path::{Component, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 pub const RESERVED_REQUEST_HEADERS: &[&str] = &[
     "host",
@@ -21,6 +21,7 @@ pub const RESERVED_REQUEST_HEADERS: &[&str] = &[
     "x-ores-project",
     "x-ores-session",
     "x-ores-service",
+    "x-ores-generation",
     "cf-access-authenticated-user-email",
     "cf-access-jwt-assertion",
 ];
@@ -50,32 +51,58 @@ pub enum LocalUpstream {
 }
 
 impl LocalUpstream {
-    pub fn validate(&self) -> Result<(), InvalidUpstream> {
+    pub fn validate(&self, unix_socket_root: Option<&Path>) -> Result<(), InvalidUpstream> {
         match self {
             Self::Tcp(addr) if addr.ip().is_loopback() && addr.port() != 0 => Ok(()),
             Self::Tcp(_) => Err(InvalidUpstream::NonLocalTcp),
-            Self::Unix(path)
-                if path.is_absolute()
-                    && !path.components().any(|component| {
-                        matches!(component, Component::ParentDir | Component::CurDir)
-                    }) =>
-            {
-                Ok(())
-            }
-            Self::Unix(_) => Err(InvalidUpstream::UnsafeUnixPath),
+            Self::Unix(path) => validate_unix_endpoint(path, unix_socket_root),
         }
     }
+}
+
+fn safe_absolute_path(path: &Path) -> bool {
+    path.is_absolute()
+        && !path.components().any(|component| {
+            matches!(component, Component::ParentDir | Component::CurDir)
+        })
+}
+
+fn validate_unix_endpoint(
+    path: &Path,
+    unix_socket_root: Option<&Path>,
+) -> Result<(), InvalidUpstream> {
+    if !safe_absolute_path(path) {
+        return Err(InvalidUpstream::UnsafeUnixPath);
+    }
+    let root = unix_socket_root.ok_or(InvalidUpstream::MissingUnixSocketRoot)?;
+    if !safe_absolute_path(root) {
+        return Err(InvalidUpstream::UnsafeUnixSocketRoot);
+    }
+    if path == root || !path.starts_with(root) {
+        return Err(InvalidUpstream::UnixOutsideRuntimeRoot);
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum InvalidUpstream {
     NonLocalTcp,
     UnsafeUnixPath,
+    MissingUnixSocketRoot,
+    UnsafeUnixSocketRoot,
+    UnixOutsideRuntimeRoot,
+    InvalidGeneration,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectIngress {
     pub endpoint: LocalUpstream,
+    /// Monotonic supervisor/session generation. Zero is never a valid live
+    /// generation and is rejected before a proxy plan is produced.
+    pub generation: u64,
+    /// Required for Unix endpoints so the ingress process can prove the socket
+    /// is inside the trusted ores-compose runtime tree. TCP endpoints ignore it.
+    pub unix_socket_root: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -83,6 +110,7 @@ pub struct ProxyPlan {
     pub project: String,
     pub session: String,
     pub service: String,
+    pub generation: u64,
     pub upstream: LocalUpstream,
     pub upstream_path: String,
     pub routing_headers: Vec<(String, String)>,
@@ -104,6 +132,7 @@ pub trait ProjectRuntime {
     /// Ensure the admitted ores-compose project/session is running and return
     /// that session's local Rust load-balancer endpoint. Implementations should
     /// coalesce concurrent starts for the same key and bound total startups.
+    /// The returned generation must be the current fenced generation.
     fn ensure_project(&self, key: &ProjectSession) -> Result<ProjectIngress, Self::Error>;
 }
 
@@ -133,21 +162,28 @@ pub fn plan_request<R: ProjectRuntime>(
     let ingress = runtime
         .ensure_project(&session)
         .map_err(IngressError::Runtime)?;
+    if ingress.generation == 0 {
+        return Err(IngressError::InvalidUpstream(
+            InvalidUpstream::InvalidGeneration,
+        ));
+    }
     ingress
         .endpoint
-        .validate()
+        .validate(ingress.unix_socket_root.as_deref())
         .map_err(IngressError::InvalidUpstream)?;
 
     Ok(ProxyPlan {
         project: route.project.clone(),
         session: route.session.clone(),
         service: route.service.clone(),
+        generation: ingress.generation,
         upstream: ingress.endpoint,
         upstream_path: route.upstream_path,
         routing_headers: vec![
             ("x-ores-project".into(), route.project),
             ("x-ores-session".into(), route.session),
             ("x-ores-service".into(), route.service),
+            ("x-ores-generation".into(), ingress.generation.to_string()),
         ],
         headers_to_remove: RESERVED_REQUEST_HEADERS
             .iter()
@@ -186,6 +222,8 @@ mod tests {
                     IpAddr::V4(Ipv4Addr::LOCALHOST),
                     39123,
                 )),
+                generation: 7,
+                unix_socket_root: None,
             })
         }
     }
@@ -209,9 +247,14 @@ mod tests {
             }]
         );
         assert_eq!(plan.service, "api");
+        assert_eq!(plan.generation, 7);
         assert_eq!(plan.upstream_path, "/v1/packages");
         assert!(plan.headers_to_remove.contains(&"x-ores-service".into()));
+        assert!(plan.headers_to_remove.contains(&"x-ores-generation".into()));
         assert!(plan.headers_to_remove.contains(&"x-forwarded-for".into()));
+        assert!(plan
+            .routing_headers
+            .contains(&("x-ores-generation".into(), "7".into())));
     }
 
     #[test]
@@ -240,6 +283,8 @@ mod tests {
         fn ensure_project(&self, _key: &ProjectSession) -> Result<ProjectIngress, Self::Error> {
             Ok(ProjectIngress {
                 endpoint: LocalUpstream::Tcp("8.8.8.8:443".parse().unwrap()),
+                generation: 1,
+                unix_socket_root: None,
             })
         }
     }
@@ -259,14 +304,74 @@ mod tests {
     }
 
     #[test]
-    fn safe_absolute_unix_socket_is_local() {
-        let endpoint = LocalUpstream::Unix(PathBuf::from("/tmp/ores-compose/run/session.sock"));
-        assert_eq!(endpoint.validate(), Ok(()));
+    fn safe_absolute_unix_socket_must_be_below_runtime_root() {
+        let endpoint = LocalUpstream::Unix(PathBuf::from(
+            "/tmp/ores-compose/sessions/pr-481/control.sock",
+        ));
+        assert_eq!(
+            endpoint.validate(Some(Path::new("/tmp/ores-compose/sessions"))),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn unix_socket_outside_runtime_root_is_rejected() {
+        let endpoint = LocalUpstream::Unix(PathBuf::from("/var/run/docker.sock"));
+        assert_eq!(
+            endpoint.validate(Some(Path::new("/tmp/ores-compose/sessions"))),
+            Err(InvalidUpstream::UnixOutsideRuntimeRoot)
+        );
+    }
+
+    #[test]
+    fn unix_socket_without_runtime_root_is_rejected() {
+        let endpoint = LocalUpstream::Unix(PathBuf::from(
+            "/tmp/ores-compose/sessions/pr-481/control.sock",
+        ));
+        assert_eq!(
+            endpoint.validate(None),
+            Err(InvalidUpstream::MissingUnixSocketRoot)
+        );
     }
 
     #[test]
     fn unix_socket_with_parent_traversal_is_rejected() {
         let endpoint = LocalUpstream::Unix(PathBuf::from("/tmp/ores-compose/../admin.sock"));
-        assert_eq!(endpoint.validate(), Err(InvalidUpstream::UnsafeUnixPath));
+        assert_eq!(
+            endpoint.validate(Some(Path::new("/tmp/ores-compose"))),
+            Err(InvalidUpstream::UnsafeUnixPath)
+        );
+    }
+
+    struct ZeroGenerationRuntime;
+
+    impl ProjectRuntime for ZeroGenerationRuntime {
+        type Error = ();
+
+        fn admit_route(&self, _route: &RouteTarget) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn ensure_project(&self, _key: &ProjectSession) -> Result<ProjectIngress, Self::Error> {
+            Ok(ProjectIngress {
+                endpoint: LocalUpstream::Tcp("127.0.0.1:39123".parse().unwrap()),
+                generation: 0,
+                unix_socket_root: None,
+            })
+        }
+    }
+
+    #[test]
+    fn zero_generation_is_never_proxyable() {
+        let result = plan_request(
+            &RouterConfig::default(),
+            &ZeroGenerationRuntime,
+            "api.zed-pkg.pr-481.local.indiebuild.dev",
+            "/",
+        );
+        assert!(matches!(
+            result,
+            Err(IngressError::InvalidUpstream(InvalidUpstream::InvalidGeneration))
+        ));
     }
 }
