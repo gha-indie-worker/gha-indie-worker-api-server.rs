@@ -62,9 +62,9 @@ impl LocalUpstream {
 
 fn safe_absolute_path(path: &Path) -> bool {
     path.is_absolute()
-        && !path.components().any(|component| {
-            matches!(component, Component::ParentDir | Component::CurDir)
-        })
+        && !path
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
 }
 
 fn validate_unix_endpoint(
@@ -385,7 +385,9 @@ mod tests {
         );
         assert!(matches!(
             result,
-            Err(IngressError::InvalidUpstream(InvalidUpstream::InvalidGeneration))
+            Err(IngressError::InvalidUpstream(
+                InvalidUpstream::InvalidGeneration
+            ))
         ));
     }
 }
