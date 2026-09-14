@@ -29,15 +29,13 @@ pub struct ForwardingContext {
 
 fn valid_header_name(name: &str) -> bool {
     !name.is_empty()
-        && name.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')
-        })
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
 fn valid_header_value(value: &str) -> bool {
-    !value
-        .bytes()
-        .any(|byte| matches!(byte, b'\r' | b'\n' | 0))
+    !value.bytes().any(|byte| matches!(byte, b'\r' | b'\n' | 0))
 }
 
 fn reserved_header(name: &str) -> bool {
@@ -156,9 +154,9 @@ mod tests {
 
         assert!(sanitized.contains(&("accept".into(), "application/json".into())));
         assert!(sanitized.contains(&("x-ores-project".into(), "zed-pkg".into())));
-        assert!(!sanitized
-            .iter()
-            .any(|(name, value)| name.eq_ignore_ascii_case("x-ores-project") && value == "attacker"));
+        assert!(!sanitized.iter().any(
+            |(name, value)| name.eq_ignore_ascii_case("x-ores-project") && value == "attacker"
+        ));
         assert!(!sanitized
             .iter()
             .any(|(name, _)| name.eq_ignore_ascii_case("x-forwarded-for")));
