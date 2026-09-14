@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::ingress::{ProxyPlan, RESERVED_REQUEST_HEADERS};
+use std::net::IpAddr;
 
 pub const MAX_PROXY_HEADERS: usize = 128;
 pub const MAX_PROXY_HEADER_BYTES: usize = 64 * 1024;
@@ -14,8 +15,16 @@ pub struct HttpListener {
 pub enum HeaderSanitizeError {
     InvalidName,
     InvalidValue,
+    InvalidForwardingContext,
     TooManyHeaders,
     HeadersTooLarge,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ForwardingContext {
+    pub client_ip: IpAddr,
+    pub original_host: String,
+    pub proto: String,
 }
 
 fn valid_header_name(name: &str) -> bool {
@@ -35,6 +44,20 @@ fn reserved_header(name: &str) -> bool {
     RESERVED_REQUEST_HEADERS
         .iter()
         .any(|reserved| name.eq_ignore_ascii_case(reserved))
+}
+
+fn validate_forwarding_context(context: &ForwardingContext) -> Result<(), HeaderSanitizeError> {
+    if !matches!(context.proto.as_str(), "http" | "https")
+        || context.original_host.is_empty()
+        || !valid_header_value(&context.original_host)
+        || context
+            .original_host
+            .bytes()
+            .any(|byte| byte.is_ascii_control() || byte == b' ')
+    {
+        return Err(HeaderSanitizeError::InvalidForwardingContext);
+    }
+    Ok(())
 }
 
 /// Strip spoofable hop-by-hop, forwarding, Cloudflare identity, and internal
@@ -79,6 +102,20 @@ pub fn sanitize_proxy_headers(
         result.push((name.clone(), value.clone()));
     }
     Ok(result)
+}
+
+/// Add forwarding metadata only after untrusted forwarding headers have been
+/// removed. The caller must supply transport-observed values rather than values
+/// copied from the incoming request.
+pub fn append_trusted_forwarding_headers(
+    headers: &mut Vec<(String, String)>,
+    context: &ForwardingContext,
+) -> Result<(), HeaderSanitizeError> {
+    validate_forwarding_context(context)?;
+    headers.push(("x-forwarded-for".into(), context.client_ip.to_string()));
+    headers.push(("x-forwarded-host".into(), context.original_host.clone()));
+    headers.push(("x-forwarded-proto".into(), context.proto.clone()));
+    Ok(())
 }
 
 #[cfg(test)]
@@ -128,6 +165,33 @@ mod tests {
         assert!(!sanitized
             .iter()
             .any(|(name, _)| name.eq_ignore_ascii_case("cf-access-jwt-assertion")));
+    }
+
+    #[test]
+    fn trusted_forwarding_headers_are_rebuilt_from_transport_context() {
+        let mut headers = sanitize_proxy_headers(Vec::new(), &plan()).unwrap();
+        let context = ForwardingContext {
+            client_ip: "198.51.100.9".parse().unwrap(),
+            original_host: "api.zed-pkg.pr-481.local.indiebuild.dev".into(),
+            proto: "https".into(),
+        };
+        append_trusted_forwarding_headers(&mut headers, &context).unwrap();
+        assert!(headers.contains(&("x-forwarded-for".into(), "198.51.100.9".into())));
+        assert!(headers.contains(&("x-forwarded-proto".into(), "https".into())));
+    }
+
+    #[test]
+    fn invalid_forwarding_context_fails_closed() {
+        let mut headers = Vec::new();
+        let context = ForwardingContext {
+            client_ip: "127.0.0.1".parse().unwrap(),
+            original_host: "bad host".into(),
+            proto: "ftp".into(),
+        };
+        assert_eq!(
+            append_trusted_forwarding_headers(&mut headers, &context),
+            Err(HeaderSanitizeError::InvalidForwardingContext)
+        );
     }
 
     #[test]
