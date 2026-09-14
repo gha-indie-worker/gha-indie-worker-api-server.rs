@@ -2,6 +2,9 @@
 
 use crate::ingress::{ProxyPlan, RESERVED_REQUEST_HEADERS};
 
+pub const MAX_PROXY_HEADERS: usize = 128;
+pub const MAX_PROXY_HEADER_BYTES: usize = 64 * 1024;
+
 #[derive(Clone, Debug)]
 pub struct HttpListener {
     pub bind: String,
@@ -11,6 +14,8 @@ pub struct HttpListener {
 pub enum HeaderSanitizeError {
     InvalidName,
     InvalidValue,
+    TooManyHeaders,
+    HeadersTooLarge,
 }
 
 fn valid_header_name(name: &str) -> bool {
@@ -34,13 +39,23 @@ fn reserved_header(name: &str) -> bool {
 
 /// Strip spoofable hop-by-hop, forwarding, Cloudflare identity, and internal
 /// routing headers, then append only the trusted routing metadata created by
-/// `plan_request`.
+/// `plan_request`. Admission is bounded before allocations grow without limit.
 pub fn sanitize_proxy_headers(
     incoming: impl IntoIterator<Item = (String, String)>,
     plan: &ProxyPlan,
 ) -> Result<Vec<(String, String)>, HeaderSanitizeError> {
     let mut result = Vec::new();
+    let mut count = 0usize;
+    let mut bytes = 0usize;
     for (name, value) in incoming {
+        count = count.saturating_add(1);
+        if count > MAX_PROXY_HEADERS {
+            return Err(HeaderSanitizeError::TooManyHeaders);
+        }
+        bytes = bytes.saturating_add(name.len()).saturating_add(value.len());
+        if bytes > MAX_PROXY_HEADER_BYTES {
+            return Err(HeaderSanitizeError::HeadersTooLarge);
+        }
         if !valid_header_name(&name) {
             return Err(HeaderSanitizeError::InvalidName);
         }
@@ -56,6 +71,10 @@ pub fn sanitize_proxy_headers(
     for (name, value) in &plan.routing_headers {
         if !valid_header_name(name) || !valid_header_value(value) {
             return Err(HeaderSanitizeError::InvalidValue);
+        }
+        bytes = bytes.saturating_add(name.len()).saturating_add(value.len());
+        if bytes > MAX_PROXY_HEADER_BYTES {
+            return Err(HeaderSanitizeError::HeadersTooLarge);
         }
         result.push((name.clone(), value.clone()));
     }
@@ -126,6 +145,26 @@ mod tests {
         assert_eq!(
             sanitize_proxy_headers(headers, &plan()),
             Err(HeaderSanitizeError::InvalidName)
+        );
+    }
+
+    #[test]
+    fn bounds_header_count() {
+        let headers = (0..=MAX_PROXY_HEADERS)
+            .map(|index| (format!("x-test-{index}"), "ok".into()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            sanitize_proxy_headers(headers, &plan()),
+            Err(HeaderSanitizeError::TooManyHeaders)
+        );
+    }
+
+    #[test]
+    fn bounds_total_header_bytes() {
+        let headers = vec![("x-large".into(), "a".repeat(MAX_PROXY_HEADER_BYTES))];
+        assert_eq!(
+            sanitize_proxy_headers(headers, &plan()),
+            Err(HeaderSanitizeError::HeadersTooLarge)
         );
     }
 }
