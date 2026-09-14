@@ -105,6 +105,18 @@ pub struct ProjectIngress {
     pub unix_socket_root: Option<PathBuf>,
 }
 
+impl ProjectIngress {
+    /// Validate all trust-boundary properties of a supervisor-produced ingress
+    /// record in one place so every future transport adapter can reuse the same
+    /// checks before dialing it.
+    pub fn validate(&self) -> Result<(), InvalidUpstream> {
+        if self.generation == 0 {
+            return Err(InvalidUpstream::InvalidGeneration);
+        }
+        self.endpoint.validate(self.unix_socket_root.as_deref())
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProxyPlan {
     pub project: String,
@@ -162,15 +174,7 @@ pub fn plan_request<R: ProjectRuntime>(
     let ingress = runtime
         .ensure_project(&session)
         .map_err(IngressError::Runtime)?;
-    if ingress.generation == 0 {
-        return Err(IngressError::InvalidUpstream(
-            InvalidUpstream::InvalidGeneration,
-        ));
-    }
-    ingress
-        .endpoint
-        .validate(ingress.unix_socket_root.as_deref())
-        .map_err(IngressError::InvalidUpstream)?;
+    ingress.validate().map_err(IngressError::InvalidUpstream)?;
 
     Ok(ProxyPlan {
         project: route.project.clone(),
@@ -305,42 +309,52 @@ mod tests {
 
     #[test]
     fn safe_absolute_unix_socket_must_be_below_runtime_root() {
-        let endpoint = LocalUpstream::Unix(PathBuf::from(
-            "/tmp/ores-compose/sessions/pr-481/control.sock",
-        ));
-        assert_eq!(
-            endpoint.validate(Some(Path::new("/tmp/ores-compose/sessions"))),
-            Ok(())
-        );
+        let ingress = ProjectIngress {
+            endpoint: LocalUpstream::Unix(PathBuf::from(
+                "/tmp/ores-compose/sessions/pr-481/control.sock",
+            )),
+            generation: 3,
+            unix_socket_root: Some(PathBuf::from("/tmp/ores-compose/sessions")),
+        };
+        assert_eq!(ingress.validate(), Ok(()));
     }
 
     #[test]
     fn unix_socket_outside_runtime_root_is_rejected() {
-        let endpoint = LocalUpstream::Unix(PathBuf::from("/var/run/docker.sock"));
+        let ingress = ProjectIngress {
+            endpoint: LocalUpstream::Unix(PathBuf::from("/var/run/docker.sock")),
+            generation: 1,
+            unix_socket_root: Some(PathBuf::from("/tmp/ores-compose/sessions")),
+        };
         assert_eq!(
-            endpoint.validate(Some(Path::new("/tmp/ores-compose/sessions"))),
+            ingress.validate(),
             Err(InvalidUpstream::UnixOutsideRuntimeRoot)
         );
     }
 
     #[test]
     fn unix_socket_without_runtime_root_is_rejected() {
-        let endpoint = LocalUpstream::Unix(PathBuf::from(
-            "/tmp/ores-compose/sessions/pr-481/control.sock",
-        ));
+        let ingress = ProjectIngress {
+            endpoint: LocalUpstream::Unix(PathBuf::from(
+                "/tmp/ores-compose/sessions/pr-481/control.sock",
+            )),
+            generation: 1,
+            unix_socket_root: None,
+        };
         assert_eq!(
-            endpoint.validate(None),
+            ingress.validate(),
             Err(InvalidUpstream::MissingUnixSocketRoot)
         );
     }
 
     #[test]
     fn unix_socket_with_parent_traversal_is_rejected() {
-        let endpoint = LocalUpstream::Unix(PathBuf::from("/tmp/ores-compose/../admin.sock"));
-        assert_eq!(
-            endpoint.validate(Some(Path::new("/tmp/ores-compose"))),
-            Err(InvalidUpstream::UnsafeUnixPath)
-        );
+        let ingress = ProjectIngress {
+            endpoint: LocalUpstream::Unix(PathBuf::from("/tmp/ores-compose/../admin.sock")),
+            generation: 1,
+            unix_socket_root: Some(PathBuf::from("/tmp/ores-compose")),
+        };
+        assert_eq!(ingress.validate(), Err(InvalidUpstream::UnsafeUnixPath));
     }
 
     struct ZeroGenerationRuntime;
