@@ -2,10 +2,7 @@
 
 use crate::config::ApiConfig;
 use crate::routes;
-use axum::{
-    routing::get,
-    Json, Router,
-};
+use axum::{routing::get, Json, Router};
 use std::error::Error;
 
 pub fn router() -> Router {
@@ -17,7 +14,10 @@ pub fn router() -> Router {
 
 pub async fn run(config: &ApiConfig) -> Result<(), Box<dyn Error>> {
     let listener = tokio::net::TcpListener::bind(&config.bind).await?;
-    eprintln!("gha-indie-worker-api-server listening on {}", listener.local_addr()?);
+    eprintln!(
+        "gha-indie-worker-api-server listening on {}",
+        listener.local_addr()?
+    );
     axum::serve(listener, router()).await?;
     Ok(())
 }
