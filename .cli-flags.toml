@@ -1,4 +1,9 @@
 # flags-2-env surface for `ghaiw-api`
+#
+# Secret-capable values are intentionally not public flags. In particular,
+# GHA_INDIE_WORKER_NATS_URL may contain credentials and is read only from the
+# runtime secret/environment boundary until flags-2-env supports env-only
+# declarations (flags-2-env/flags-2-env#29).
 [flags.config]
 env = "GHA_INDIE_WORKER_CONFIG"
 aliases = ["config"]
@@ -28,9 +33,3 @@ env = "GHA_INDIE_WORKER_API_TCP_BIND"
 aliases = ["gha-indie-worker-api-tcp-bind"]
 type = "string"
 help = "Runtime environment key GHA_INDIE_WORKER_API_TCP_BIND."
-
-[flags.gha-indie-worker-nats-url]
-env = "GHA_INDIE_WORKER_NATS_URL"
-aliases = ["gha-indie-worker-nats-url"]
-type = "string"
-help = "Runtime environment key GHA_INDIE_WORKER_NATS_URL."
