@@ -2,7 +2,6 @@
 org = "gha-indie-worker"
 name = "gha-indie-worker-api-server.rs"
 version = "0.1.0"
-kind = "api-server"
 language = "rust"
 
 [dependencies]
