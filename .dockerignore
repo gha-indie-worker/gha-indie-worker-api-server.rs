@@ -1,15 +1,26 @@
-# BEGIN ores-sops dotenv policy — keep plaintext out of the build context.
-# Ciphertext (env/enc/*.env.enc) is re-included so the image can decrypt at
-# `docker run`; nothing is decrypted at build time.
+# Build output and local tooling.
 .git
 .github
 target
+**/target
 node_modules
+.vendor
+.zed
+
+# ores-sops consumer boundary: neither plaintext nor ciphertext environment
+# artifacts belong in Docker build contexts, caches, provenance or registries.
 .env
 .env.*
 *.env
 **/*.env
+**/*.env.*
 env/dec
-!env/enc/*.env.enc
-!scripts/sops-entrypoint.sh
-# END ores-sops dotenv policy
+env/dec/**
+env/enc
+env/enc/**
+
+# Common local credential artifacts.
+**/*.pem
+**/*.key
+**/*.p8
+**/*service-account*.json
