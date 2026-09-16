@@ -8,7 +8,6 @@ pub struct CliEnvValues {
     pub config: Option<String>,
     pub gha_indie_worker_api_bind: Option<String>,
     pub gha_indie_worker_api_tcp_bind: Option<String>,
-    pub gha_indie_worker_nats_url: Option<String>,
     pub json: Option<bool>,
 }
 
@@ -19,7 +18,6 @@ pub fn load_from(lookup: impl Fn(&str) -> Option<String>) -> CliEnvValues {
         config: lookup("GHA_INDIE_WORKER_CONFIG").filter(|value| !value.is_empty()),
         gha_indie_worker_api_bind: lookup("GHA_INDIE_WORKER_API_BIND").filter(|value| !value.is_empty()),
         gha_indie_worker_api_tcp_bind: lookup("GHA_INDIE_WORKER_API_TCP_BIND").filter(|value| !value.is_empty()),
-        gha_indie_worker_nats_url: lookup("GHA_INDIE_WORKER_NATS_URL").filter(|value| !value.is_empty()),
         json: lookup("GHA_INDIE_WORKER_JSON").map(|raw| parse_bool(Some(raw), false)),
     }
 }
@@ -185,10 +183,6 @@ pub fn load_env_map(
     let gha_indie_worker_api_tcp_bind = pick(&["GHA_INDIE_WORKER_API_TCP_BIND"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, None);
     if let Some(value) = gha_indie_worker_api_tcp_bind {
         out.insert("GHA_INDIE_WORKER_API_TCP_BIND".to_string(), value);
-    }
-    let gha_indie_worker_nats_url = pick(&["GHA_INDIE_WORKER_NATS_URL"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, None);
-    if let Some(value) = gha_indie_worker_nats_url {
-        out.insert("GHA_INDIE_WORKER_NATS_URL".to_string(), value);
     }
     let json = pick(&["GHA_INDIE_WORKER_JSON"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, None);
     if let Some(value) = json {
