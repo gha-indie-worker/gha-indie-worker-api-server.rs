@@ -1,0 +1,54 @@
+name: Zed package contract
+
+on:
+  pull_request:
+    paths:
+      - '.zpkg.toml'
+      - '.zpkg.lock'
+      - '.github/workflows/zed-package-contract.yml'
+  push:
+    branches:
+      - 'fix/DEN-2843-zed-core-imports-current-schema-20260915'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zed-package-contract-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+  ZED_CLI_REV: a1c5b7a3c72b957944b76911fcbc723dd9c16541
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.EXPECTED_HEAD }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Build pinned Zed CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          git clone --filter=blob:none https://github.com/zed-pkg/zed-cli.git "$RUNNER_TEMP/zed-cli"
+          git -C "$RUNNER_TEMP/zed-cli" checkout --detach "$ZED_CLI_REV"
+          test "$(git -C "$RUNNER_TEMP/zed-cli" rev-parse HEAD)" = "$ZED_CLI_REV"
+          (cd "$RUNNER_TEMP/zed-cli" && cargo build --locked --release --bin zed)
+
+      - name: Validate package manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/zed-cli/target/release/zed" validate --manifest .zpkg.toml
+          grep -Fq '"gha-indie-worker/gha-indie-worker-lib-core" = "^0.1.0"' .zpkg.toml
+          grep -Fq '"gha-indie-worker/gha-indie-worker-orm-core" = "^0.1.0"' .zpkg.toml
+          git diff --exit-code HEAD
