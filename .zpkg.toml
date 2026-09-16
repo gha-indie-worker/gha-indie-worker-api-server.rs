@@ -1,6 +1,6 @@
 [package]
 org = "gha-indie-worker"
-name = "gha-indie-worker-api-server.rs"
+name = "gha-indie-worker-api-server"
 version = "0.1.0"
 language = "rust"
 
