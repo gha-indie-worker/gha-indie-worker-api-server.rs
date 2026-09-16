@@ -8,7 +8,6 @@ pub type CliEnvValues {
     config: Option(String),
     gha_indie_worker_api_bind: Option(String),
     gha_indie_worker_api_tcp_bind: Option(String),
-    gha_indie_worker_nats_url: Option(String),
     json: Option(String),
   )
 }
@@ -20,7 +19,6 @@ pub fn load_from(lookup: fn(String) -> Option(String)) -> CliEnvValues {
     config: nonempty(lookup("GHA_INDIE_WORKER_CONFIG")),
     gha_indie_worker_api_bind: nonempty(lookup("GHA_INDIE_WORKER_API_BIND")),
     gha_indie_worker_api_tcp_bind: nonempty(lookup("GHA_INDIE_WORKER_API_TCP_BIND")),
-    gha_indie_worker_nats_url: nonempty(lookup("GHA_INDIE_WORKER_NATS_URL")),
     json: nonempty(lookup("GHA_INDIE_WORKER_JSON")),
   )
 }
