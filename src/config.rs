@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 #[allow(clippy::match_like_matches_macro)]
+#[rustfmt::skip]
 #[path = "../generated/rust/runtime.rs"]
 mod env_runtime;
 
