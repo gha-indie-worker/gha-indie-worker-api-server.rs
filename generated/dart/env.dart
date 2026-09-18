@@ -7,6 +7,5 @@ final class CliEnv {
   static const String config = 'GHA_INDIE_WORKER_CONFIG';
   static const String ghaIndieWorkerApiBind = 'GHA_INDIE_WORKER_API_BIND';
   static const String ghaIndieWorkerApiTcpBind = 'GHA_INDIE_WORKER_API_TCP_BIND';
-  static const String ghaIndieWorkerNatsUrl = 'GHA_INDIE_WORKER_NATS_URL';
   static const String json = 'GHA_INDIE_WORKER_JSON';
 }

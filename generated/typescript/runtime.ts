@@ -5,7 +5,6 @@ export interface CliEnvValues {
   readonly config?: string;
   readonly gha_indie_worker_api_bind?: string;
   readonly gha_indie_worker_api_tcp_bind?: string;
-  readonly gha_indie_worker_nats_url?: string;
   readonly json?: boolean;
 }
 
@@ -16,7 +15,6 @@ export function loadFrom(lookup: (key: string) => string | undefined): CliEnvVal
     config: nonEmpty(lookup("GHA_INDIE_WORKER_CONFIG")),
     gha_indie_worker_api_bind: nonEmpty(lookup("GHA_INDIE_WORKER_API_BIND")),
     gha_indie_worker_api_tcp_bind: nonEmpty(lookup("GHA_INDIE_WORKER_API_TCP_BIND")),
-    gha_indie_worker_nats_url: nonEmpty(lookup("GHA_INDIE_WORKER_NATS_URL")),
     json: (() => { const raw = lookup("GHA_INDIE_WORKER_JSON"); return raw === undefined ? undefined : parseBool(raw, false); })(),
   };
 }
@@ -197,8 +195,6 @@ export function loadEnvMap(
   if (gha_indie_worker_api_bind !== undefined) out["GHA_INDIE_WORKER_API_BIND"] = gha_indie_worker_api_bind;
   const gha_indie_worker_api_tcp_bind = pick(["GHA_INDIE_WORKER_API_TCP_BIND"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, undefined);
   if (gha_indie_worker_api_tcp_bind !== undefined) out["GHA_INDIE_WORKER_API_TCP_BIND"] = gha_indie_worker_api_tcp_bind;
-  const gha_indie_worker_nats_url = pick(["GHA_INDIE_WORKER_NATS_URL"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, undefined);
-  if (gha_indie_worker_nats_url !== undefined) out["GHA_INDIE_WORKER_NATS_URL"] = gha_indie_worker_nats_url;
   const json = pick(["GHA_INDIE_WORKER_JSON"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, undefined);
   if (json !== undefined) out["GHA_INDIE_WORKER_JSON"] = json;
   return out;

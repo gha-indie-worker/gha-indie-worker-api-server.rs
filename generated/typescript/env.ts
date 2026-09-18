@@ -4,7 +4,6 @@ export const API_BASE = "GHA_INDIE_WORKER_API_BASE" as const;
 export const CONFIG = "GHA_INDIE_WORKER_CONFIG" as const;
 export const GHA_INDIE_WORKER_API_BIND = "GHA_INDIE_WORKER_API_BIND" as const;
 export const GHA_INDIE_WORKER_API_TCP_BIND = "GHA_INDIE_WORKER_API_TCP_BIND" as const;
-export const GHA_INDIE_WORKER_NATS_URL = "GHA_INDIE_WORKER_NATS_URL" as const;
 export const JSON = "GHA_INDIE_WORKER_JSON" as const;
 
 export interface CliEnv {
@@ -12,7 +11,6 @@ export interface CliEnv {
   readonly GHA_INDIE_WORKER_CONFIG?: string;
   readonly GHA_INDIE_WORKER_API_BIND?: string;
   readonly GHA_INDIE_WORKER_API_TCP_BIND?: string;
-  readonly GHA_INDIE_WORKER_NATS_URL?: string;
   readonly GHA_INDIE_WORKER_JSON?: boolean;
 }
 
@@ -21,6 +19,5 @@ export const EnvKeys = {
   CONFIG: CONFIG,
   GHA_INDIE_WORKER_API_BIND: GHA_INDIE_WORKER_API_BIND,
   GHA_INDIE_WORKER_API_TCP_BIND: GHA_INDIE_WORKER_API_TCP_BIND,
-  GHA_INDIE_WORKER_NATS_URL: GHA_INDIE_WORKER_NATS_URL,
   JSON: JSON,
 } as const;

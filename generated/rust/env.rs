@@ -5,7 +5,6 @@ pub const API_BASE: &str = "GHA_INDIE_WORKER_API_BASE";
 pub const CONFIG: &str = "GHA_INDIE_WORKER_CONFIG";
 pub const GHA_INDIE_WORKER_API_BIND: &str = "GHA_INDIE_WORKER_API_BIND";
 pub const GHA_INDIE_WORKER_API_TCP_BIND: &str = "GHA_INDIE_WORKER_API_TCP_BIND";
-pub const GHA_INDIE_WORKER_NATS_URL: &str = "GHA_INDIE_WORKER_NATS_URL";
 pub const JSON: &str = "GHA_INDIE_WORKER_JSON";
 
 /// Compile-time env key names from `.cli-flags.toml`.
@@ -18,8 +17,6 @@ pub struct CliEnv {
     pub gha_indie_worker_api_bind: &'static str,
     /// Runtime environment key GHA_INDIE_WORKER_API_TCP_BIND.
     pub gha_indie_worker_api_tcp_bind: &'static str,
-    /// Runtime environment key GHA_INDIE_WORKER_NATS_URL.
-    pub gha_indie_worker_nats_url: &'static str,
     /// Emit JSON
     pub json: &'static str,
 }
@@ -30,7 +27,6 @@ impl CliEnv {
         config: CONFIG,
         gha_indie_worker_api_bind: GHA_INDIE_WORKER_API_BIND,
         gha_indie_worker_api_tcp_bind: GHA_INDIE_WORKER_API_TCP_BIND,
-        gha_indie_worker_nats_url: GHA_INDIE_WORKER_NATS_URL,
         json: JSON,
     };
 }
