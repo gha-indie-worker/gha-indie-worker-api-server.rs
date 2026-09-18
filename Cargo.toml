@@ -12,6 +12,7 @@
     nats-transport = []
 
     [dependencies]
+k8s-web-api-data-plane = { git = "https://github.com/ORESoftware/k8s-libs-and-shared-defs.git", rev = "55adadc9f6d223d40b28ae66097dfe16930951b1", package = "k8s-web-api-data-plane" }
     serde = { version = "1", features = ["derive"] }
     serde_json = "1"
     thiserror = "2"

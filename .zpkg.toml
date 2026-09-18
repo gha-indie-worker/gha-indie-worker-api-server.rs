@@ -2,3 +2,6 @@ name = "gha-indie-worker-api-server.rs"
 kind = "api-server"
 version = "0.1.0"
 
+[dependencies]
+"gha-indie-worker/gha-indie-worker-lib-core" = "^0.1.0"
+"gha-indie-worker/gha-indie-worker-orm-core" = "^0.1.0"
