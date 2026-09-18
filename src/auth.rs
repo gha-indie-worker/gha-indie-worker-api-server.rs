@@ -8,4 +8,3 @@ pub fn require_bearer(header: Option<&str>) -> Result<&str, ApiError> {
         .filter(|token| !token.is_empty())
         .ok_or(ApiError::Unauthenticated)
 }
-
