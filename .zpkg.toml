@@ -1,7 +1,6 @@
 [package]
 org = "gha-indie-worker"
 name = "gha-indie-worker-api-server"
-kind = "server"
 version = "0.1.0"
 description = "JSON API server for GHA Indie Worker"
 license = "MIT"
