@@ -8,7 +8,6 @@
 .env.*
 !.env.example
 *.sqlite
-Cargo.lock
 
 
 
@@ -24,3 +23,7 @@ Cargo.lock
 !/env/enc/dev.env.enc
 !/env/enc/prod.env.enc
 # END ores-sops dotenv policy
+
+# Zed package-manager runtime state and materialized dependencies
+.zed/
+zed_modules/
