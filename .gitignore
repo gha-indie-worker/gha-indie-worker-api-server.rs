@@ -8,7 +8,8 @@
 .env.*
 !.env.example
 *.sqlite
-Cargo.lock
+# Cargo.lock is committed on purpose: this crate builds a binary, and the
+# rust-verify CI profile runs cargo with --locked, which needs it in tree.
 
 
 
