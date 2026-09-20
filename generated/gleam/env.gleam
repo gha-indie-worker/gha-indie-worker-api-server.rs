@@ -8,8 +8,6 @@ pub const gha_indie_worker_api_bind = "GHA_INDIE_WORKER_API_BIND"
 
 pub const gha_indie_worker_api_tcp_bind = "GHA_INDIE_WORKER_API_TCP_BIND"
 
-pub const gha_indie_worker_nats_url = "GHA_INDIE_WORKER_NATS_URL"
-
 pub const json = "GHA_INDIE_WORKER_JSON"
 
 pub type CliEnv {
@@ -18,7 +16,6 @@ pub type CliEnv {
     config: String,
     gha_indie_worker_api_bind: String,
     gha_indie_worker_api_tcp_bind: String,
-    gha_indie_worker_nats_url: String,
     json: Bool,
   )
 }

@@ -3,13 +3,12 @@
 import 'dart:io';
 
 final class CliEnvValues {
-  const CliEnvValues({required this.apiBase, required this.config, required this.ghaIndieWorkerApiBind, required this.ghaIndieWorkerApiTcpBind, required this.ghaIndieWorkerNatsUrl, required this.json});
+  const CliEnvValues({required this.apiBase, required this.config, required this.ghaIndieWorkerApiBind, required this.ghaIndieWorkerApiTcpBind, required this.json});
 
   final String? apiBase;
   final String? config;
   final String? ghaIndieWorkerApiBind;
   final String? ghaIndieWorkerApiTcpBind;
-  final String? ghaIndieWorkerNatsUrl;
   final bool? json;
 }
 
@@ -20,7 +19,6 @@ CliEnvValues loadFrom(String? Function(String key) lookup) {
     config: _nonEmpty(lookup('GHA_INDIE_WORKER_CONFIG')),
     ghaIndieWorkerApiBind: _nonEmpty(lookup('GHA_INDIE_WORKER_API_BIND')),
     ghaIndieWorkerApiTcpBind: _nonEmpty(lookup('GHA_INDIE_WORKER_API_TCP_BIND')),
-    ghaIndieWorkerNatsUrl: _nonEmpty(lookup('GHA_INDIE_WORKER_NATS_URL')),
     json: () { final raw = lookup('GHA_INDIE_WORKER_JSON'); return raw == null ? null : _parseBool(raw, false); }(),
   );
 }
@@ -178,8 +176,6 @@ Map<String, String> loadEnvMap(
   if (ghaIndieWorkerApiBind != null) out['GHA_INDIE_WORKER_API_BIND'] = ghaIndieWorkerApiBind;
   final ghaIndieWorkerApiTcpBind = pick(['GHA_INDIE_WORKER_API_TCP_BIND'], ['flags', 'env_shell', 'env_file'], shell, dotenv, flags, null);
   if (ghaIndieWorkerApiTcpBind != null) out['GHA_INDIE_WORKER_API_TCP_BIND'] = ghaIndieWorkerApiTcpBind;
-  final ghaIndieWorkerNatsUrl = pick(['GHA_INDIE_WORKER_NATS_URL'], ['flags', 'env_shell', 'env_file'], shell, dotenv, flags, null);
-  if (ghaIndieWorkerNatsUrl != null) out['GHA_INDIE_WORKER_NATS_URL'] = ghaIndieWorkerNatsUrl;
   final json = pick(['GHA_INDIE_WORKER_JSON'], ['flags', 'env_shell', 'env_file'], shell, dotenv, flags, null);
   if (json != null) out['GHA_INDIE_WORKER_JSON'] = json;
   return out;
