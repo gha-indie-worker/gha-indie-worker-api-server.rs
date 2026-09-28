@@ -8,6 +8,7 @@ pub struct Catalog {
 }
 
 pub fn catalog() -> Catalog {
-    Catalog { resource: "WorkerLease" }
+    Catalog {
+        resource: "WorkerLease",
+    }
 }
-

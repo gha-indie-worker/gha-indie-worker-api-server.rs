@@ -6,4 +6,3 @@ use crate::config::ApiConfig;
 pub struct AppState {
     pub config: ApiConfig,
 }
-

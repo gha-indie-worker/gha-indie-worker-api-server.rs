@@ -1,35 +1,20 @@
-# flags-2-env surface for `ghaiw-api`
-[flags.config]
-env = "GHA_INDIE_WORKER_CONFIG"
-long = "config"
-help = "Path to TOML configuration"
+# Public flags-2-env surface for `ghaiw-api`.
+#
+# Secret-capable configuration is intentionally environment-only. In particular,
+# GHA_INDIE_WORKER_NATS_URL may contain credentials and must never be accepted
+# through argv/process listings.
 
-[flags.api_base]
-env = "GHA_INDIE_WORKER_API_BASE"
-long = "api-base"
-help = "API HTTP base URL"
-
-[flags.json]
-env = "GHA_INDIE_WORKER_JSON"
-long = "json"
-switch = true
-help = "Emit JSON"
-
+[parse]
+allow_unknown = false
 
 [flags.gha-indie-worker-api-bind]
 env = "GHA_INDIE_WORKER_API_BIND"
 long = "gha-indie-worker-api-bind"
 type = "string"
-help = "Runtime environment key GHA_INDIE_WORKER_API_BIND."
+help = "HTTP listener binding."
 
 [flags.gha-indie-worker-api-tcp-bind]
 env = "GHA_INDIE_WORKER_API_TCP_BIND"
 long = "gha-indie-worker-api-tcp-bind"
 type = "string"
-help = "Runtime environment key GHA_INDIE_WORKER_API_TCP_BIND."
-
-[flags.gha-indie-worker-nats-url]
-env = "GHA_INDIE_WORKER_NATS_URL"
-long = "gha-indie-worker-nats-url"
-type = "string"
-help = "Runtime environment key GHA_INDIE_WORKER_NATS_URL."
+help = "Optional stateful TCP listener binding."

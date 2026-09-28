@@ -9,6 +9,8 @@ pub struct HealthBody {
 }
 
 pub fn body() -> HealthBody {
-    HealthBody { ok: true, service: "gha-indie-worker-api-server" }
+    HealthBody {
+        ok: true,
+        service: "gha-indie-worker-api-server",
+    }
 }
-
