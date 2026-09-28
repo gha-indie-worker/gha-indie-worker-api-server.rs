@@ -1,8 +1,17 @@
 #![forbid(unsafe_code)]
 
+use std::{
+    io::{Read, Write},
+    net::{SocketAddr, TcpListener, TcpStream},
+    time::Duration,
+};
+
 use crate::config::ApiConfig;
 use crate::error::ApiError;
 use crate::routes;
+
+const MAX_REQUEST_HEAD_BYTES: usize = 16 * 1024;
+const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TransportKind {
@@ -86,27 +95,119 @@ fn listener_binding(
     })
 }
 
+fn http_binding(plan: &StartupPlan) -> Result<&ListenerBinding, ApiError> {
+    plan.listeners
+        .iter()
+        .find(|listener| listener.transport == TransportKind::Http)
+        .ok_or(ApiError::InvalidConfiguration("GHA_INDIE_WORKER_API_BIND"))
+}
+
+fn loopback_socket(endpoint: &str) -> Result<SocketAddr, ApiError> {
+    let address = endpoint
+        .parse::<SocketAddr>()
+        .map_err(|_| ApiError::InvalidConfiguration("GHA_INDIE_WORKER_API_BIND"))?;
+    if !address.ip().is_loopback() || address.port() == 0 {
+        return Err(ApiError::InvalidConfiguration("GHA_INDIE_WORKER_API_BIND"));
+    }
+    Ok(address)
+}
+
 pub fn run(config: &ApiConfig) -> Result<(), ApiError> {
     let plan = startup_plan(config)?;
-    for listener in &plan.listeners {
-        match listener.transport {
-            TransportKind::Http | TransportKind::StatefulTcp => println!(
-                "api {:?} endpoint {}",
-                listener.transport, listener.endpoint
-            ),
-            TransportKind::DurableNats => println!("api DurableNats configured"),
+    let binding = http_binding(&plan)?;
+    let address = loopback_socket(&binding.endpoint)?;
+    let listener = TcpListener::bind(address)?;
+    eprintln!("gha-indie-worker-api-server listening on http://{address}");
+
+    for connection in listener.incoming() {
+        match connection {
+            Ok(mut stream) => {
+                if let Err(error) = handle_connection(&mut stream) {
+                    eprintln!("gha-indie-worker-api-server connection error: {error}");
+                }
+            }
+            Err(error) => eprintln!("gha-indie-worker-api-server accept error: {error}"),
         }
     }
-    println!(
-        "{}",
-        serde_json::to_string(&routes::health::body()).map_err(|_| ApiError::Serialization)?
-    );
+
     Ok(())
+}
+
+fn handle_connection(stream: &mut TcpStream) -> Result<(), ApiError> {
+    stream.set_read_timeout(Some(CONNECTION_TIMEOUT))?;
+    stream.set_write_timeout(Some(CONNECTION_TIMEOUT))?;
+
+    let mut bytes = [0_u8; MAX_REQUEST_HEAD_BYTES];
+    let count = stream.read(&mut bytes)?;
+    if count == 0 {
+        return Ok(());
+    }
+
+    let head = std::str::from_utf8(&bytes[..count]).unwrap_or_default();
+    let request_line = head.lines().next().unwrap_or_default();
+    let mut parts = request_line.split_whitespace();
+    let method = parts.next().unwrap_or_default();
+    let target = parts.next().unwrap_or_default();
+    let path = target.split('?').next().unwrap_or(target);
+
+    let response = route(method, path)?;
+    stream.write_all(&response)?;
+    stream.flush()?;
+    Ok(())
+}
+
+fn route(method: &str, path: &str) -> Result<Vec<u8>, ApiError> {
+    match (method, path) {
+        ("GET", "/healthz") | ("GET", "/readyz") => {
+            json_response(200, &routes::health::body())
+        }
+        ("GET", "/v1/catalog") => json_response(200, &routes::v1::catalog()),
+        ("GET", "/v1/status") => json_response(
+            200,
+            &serde_json::json!({
+                "ok": true,
+                "service": "gha-indie-worker-api-server",
+                "runtime": "standalone-http",
+            }),
+        ),
+        ("HEAD", "/healthz") | ("HEAD", "/readyz") => empty_response(200),
+        ("GET" | "HEAD", _) => json_response(404, &serde_json::json!({"error": "not_found"})),
+        _ => json_response(405, &serde_json::json!({"error": "method_not_allowed"})),
+    }
+}
+
+fn json_response<T: serde::Serialize>(status: u16, body: &T) -> Result<Vec<u8>, ApiError> {
+    let body = serde_json::to_vec(body).map_err(|_| ApiError::Serialization)?;
+    Ok(http_response(
+        status,
+        "application/json; charset=utf-8",
+        &body,
+    ))
+}
+
+fn empty_response(status: u16) -> Result<Vec<u8>, ApiError> {
+    Ok(http_response(status, "application/json; charset=utf-8", &[]))
+}
+
+fn http_response(status: u16, content_type: &str, body: &[u8]) -> Vec<u8> {
+    let reason = match status {
+        200 => "OK",
+        404 => "Not Found",
+        405 => "Method Not Allowed",
+        _ => "Error",
+    };
+    let mut response = format!(
+        "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",
+        body.len()
+    )
+    .into_bytes();
+    response.extend_from_slice(body);
+    response
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{startup_plan, ListenerBinding, StartupPlan, TransportKind};
+    use super::{loopback_socket, route, startup_plan, ListenerBinding, StartupPlan, TransportKind};
     use crate::{config::ApiConfig, error::ApiError};
 
     #[test]
@@ -168,5 +269,25 @@ mod tests {
         let debug = format!("{plan:?}");
         assert!(debug.contains("[redacted]"));
         assert!(!debug.contains("credential"));
+    }
+
+    #[test]
+    fn listener_must_be_literal_loopback() {
+        assert!(loopback_socket("127.0.0.1:18090").is_ok());
+        assert!(loopback_socket("[::1]:18090").is_ok());
+        assert!(loopback_socket("0.0.0.0:18090").is_err());
+        assert!(loopback_socket("127.0.0.1:0").is_err());
+    }
+
+    #[test]
+    fn health_and_status_are_real_http_responses() {
+        let health = String::from_utf8(route("GET", "/healthz").expect("health response"))
+            .expect("utf8 response");
+        assert!(health.starts_with("HTTP/1.1 200 OK"));
+        assert!(health.contains("gha-indie-worker-api-server"));
+
+        let status = String::from_utf8(route("GET", "/v1/status").expect("status response"))
+            .expect("utf8 response");
+        assert!(status.contains("standalone-http"));
     }
 }
