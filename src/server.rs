@@ -1,4 +1,8 @@
 #![forbid(unsafe_code)]
+#![allow(clippy::needless_return)]
+
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
 
 use crate::config::ApiConfig;
 use crate::error::ApiError;
@@ -19,7 +23,7 @@ pub struct ListenerBinding {
 
 impl std::fmt::Debug for ListenerBinding {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
+        return formatter
             .debug_struct("ListenerBinding")
             .field("transport", &self.transport)
             .field(
@@ -29,7 +33,7 @@ impl std::fmt::Debug for ListenerBinding {
                     TransportKind::Http | TransportKind::StatefulTcp => &self.endpoint,
                 },
             )
-            .finish()
+            .finish();
     }
 }
 
@@ -46,28 +50,30 @@ pub fn startup_plan(config: &ApiConfig) -> Result<StartupPlan, ApiError> {
     )];
     let optional = [
         config.tcp_bind.as_ref().map(|endpoint| {
-            (
+            return (
                 TransportKind::StatefulTcp,
                 "GHA_INDIE_WORKER_API_TCP_BIND",
                 endpoint,
-            )
+            );
         }),
         config.nats_url.as_ref().map(|endpoint| {
-            (
+            return (
                 TransportKind::DurableNats,
                 "GHA_INDIE_WORKER_NATS_URL",
                 endpoint,
-            )
+            );
         }),
     ];
 
     let listeners = required
         .into_iter()
         .chain(optional.into_iter().flatten())
-        .map(|(transport, field, endpoint)| listener_binding(transport, field, endpoint))
+        .map(|(transport, field, endpoint)| {
+            return listener_binding(transport, field, endpoint);
+        })
         .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(StartupPlan { listeners })
+    return Ok(StartupPlan { listeners });
 }
 
 fn listener_binding(
@@ -80,33 +86,88 @@ fn listener_binding(
         return Err(ApiError::InvalidConfiguration(field));
     }
 
-    Ok(ListenerBinding {
+    return Ok(ListenerBinding {
         transport,
         endpoint: endpoint.to_owned(),
-    })
+    });
+}
+
+fn response_for_path(path: &str) -> Result<(&'static str, &'static str, String), ApiError> {
+    if matches!(path, "/readyz" | "/healthz") {
+        let body =
+            serde_json::to_string(&routes::health::body()).map_err(|_| ApiError::Serialization)?;
+        return Ok(("200 OK", "application/json", body));
+    }
+
+    return Ok((
+        "404 Not Found",
+        "text/plain; charset=utf-8",
+        "not found\n".to_owned(),
+    ));
+}
+
+fn handle_http_connection(stream: &mut TcpStream) -> Result<(), ApiError> {
+    let mut buffer = [0_u8; 8192];
+    let bytes_read = stream.read(&mut buffer)?;
+    if bytes_read == 0 {
+        return Ok(());
+    }
+
+    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+    let path = request
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .unwrap_or("/");
+    let (status, content_type, body) = response_for_path(path)?;
+    let response = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
+
+    stream.write_all(response.as_bytes())?;
+    stream.flush()?;
+    return Ok(());
+}
+
+fn serve_http(bind: &str) -> Result<(), ApiError> {
+    let listener = TcpListener::bind(bind)?;
+    println!("api Http endpoint {bind}");
+
+    for connection in listener.incoming() {
+        let mut stream = connection?;
+        handle_http_connection(&mut stream)?;
+    }
+
+    return Ok(());
 }
 
 pub fn run(config: &ApiConfig) -> Result<(), ApiError> {
     let plan = startup_plan(config)?;
     for listener in &plan.listeners {
         match listener.transport {
-            TransportKind::Http | TransportKind::StatefulTcp => println!(
-                "api {:?} endpoint {}",
-                listener.transport, listener.endpoint
-            ),
-            TransportKind::DurableNats => println!("api DurableNats configured"),
+            TransportKind::Http => {}
+            TransportKind::StatefulTcp => {
+                println!("api StatefulTcp configured at {}", listener.endpoint);
+            }
+            TransportKind::DurableNats => {
+                println!("api DurableNats configured");
+            }
         }
     }
-    println!(
-        "{}",
-        serde_json::to_string(&routes::health::body()).map_err(|_| ApiError::Serialization)?
-    );
-    Ok(())
+
+    let http = plan
+        .listeners
+        .iter()
+        .find(|listener| listener.transport == TransportKind::Http)
+        .ok_or(ApiError::InvalidConfiguration("GHA_INDIE_WORKER_API_BIND"))?;
+
+    return serve_http(&http.endpoint);
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{startup_plan, ListenerBinding, StartupPlan, TransportKind};
+    use super::{response_for_path, startup_plan, ListenerBinding, StartupPlan, TransportKind};
     use crate::{config::ApiConfig, error::ApiError};
 
     #[test]
@@ -168,5 +229,17 @@ mod tests {
         let debug = format!("{plan:?}");
         assert!(debug.contains("[redacted]"));
         assert!(!debug.contains("credential"));
+    }
+
+    #[test]
+    fn readiness_is_json_and_unknown_paths_fail_closed() {
+        let (status, content_type, body) = response_for_path("/readyz").expect("ready response");
+        assert_eq!(status, "200 OK");
+        assert_eq!(content_type, "application/json");
+        assert!(body.contains("\"ok\":true"));
+
+        let (status, _, body) = response_for_path("/missing").expect("404 response");
+        assert_eq!(status, "404 Not Found");
+        assert_eq!(body, "not found\n");
     }
 }
