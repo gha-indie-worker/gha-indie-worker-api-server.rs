@@ -94,8 +94,8 @@ fn listener_binding(
 
 fn response_for_path(path: &str) -> Result<(&'static str, &'static str, String), ApiError> {
     if matches!(path, "/readyz" | "/healthz") {
-        let body = serde_json::to_string(&routes::health::body())
-            .map_err(|_| ApiError::Serialization)?;
+        let body =
+            serde_json::to_string(&routes::health::body()).map_err(|_| ApiError::Serialization)?;
         return Ok(("200 OK", "application/json", body));
     }
 
