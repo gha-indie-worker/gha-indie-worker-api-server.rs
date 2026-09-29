@@ -14,4 +14,6 @@ pub enum ApiError {
     Serialization,
     #[error("configuration resolution failed: {0}")]
     ConfigurationResolution(String),
+    #[error("server I/O failed: {0}")]
+    Io(#[from] std::io::Error),
 }
