@@ -1,8 +1,13 @@
 #![forbid(unsafe_code)]
 
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+
 use crate::config::ApiConfig;
 use crate::error::ApiError;
 use crate::routes;
+
+const MAX_REQUEST_HEAD: usize = 16 * 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TransportKind {
@@ -86,27 +91,104 @@ fn listener_binding(
     })
 }
 
+fn response_for(method: &str, path: &str) -> Result<(u16, &'static str, String), ApiError> {
+    if method != "GET" {
+        return Ok((
+            405,
+            "application/json; charset=utf-8",
+            r#"{"error":"method_not_allowed"}"#.to_owned(),
+        ));
+    }
+
+    match path {
+        "/healthz" | "/readyz" => Ok((
+            200,
+            "application/json; charset=utf-8",
+            serde_json::to_string(&routes::health::body()).map_err(|_| ApiError::Serialization)?,
+        )),
+        "/v1" | "/v1/catalog" => Ok((
+            200,
+            "application/json; charset=utf-8",
+            serde_json::to_string(&routes::v1::catalog()).map_err(|_| ApiError::Serialization)?,
+        )),
+        _ => Ok((
+            404,
+            "application/json; charset=utf-8",
+            r#"{"error":"not_found"}"#.to_owned(),
+        )),
+    }
+}
+
+fn reason(status: u16) -> &'static str {
+    match status {
+        200 => "OK",
+        404 => "Not Found",
+        405 => "Method Not Allowed",
+        _ => "Internal Server Error",
+    }
+}
+
+fn handle_http(mut stream: TcpStream) -> Result<(), ApiError> {
+    stream.set_read_timeout(Some(std::time::Duration::from_secs(3)))?;
+    stream.set_write_timeout(Some(std::time::Duration::from_secs(3)))?;
+
+    let mut buffer = [0_u8; MAX_REQUEST_HEAD];
+    let read = stream.read(&mut buffer)?;
+    if read == 0 {
+        return Ok(());
+    }
+    let request = std::str::from_utf8(&buffer[..read]).unwrap_or_default();
+    let mut parts = request.lines().next().unwrap_or_default().split_whitespace();
+    let method = parts.next().unwrap_or_default();
+    let target = parts.next().unwrap_or("/");
+    let path = target.split('?').next().unwrap_or(target);
+
+    let (status, content_type, body) = response_for(method, path)?;
+    let head = format!(
+        "HTTP/1.1 {status} {}\r\ncontent-type: {content_type}\r\ncontent-length: {}\r\ncache-control: no-store\r\nconnection: close\r\n\r\n",
+        reason(status),
+        body.len()
+    );
+    stream.write_all(head.as_bytes())?;
+    stream.write_all(body.as_bytes())?;
+    stream.flush()?;
+    Ok(())
+}
+
 pub fn run(config: &ApiConfig) -> Result<(), ApiError> {
     let plan = startup_plan(config)?;
+    let http = plan
+        .listeners
+        .iter()
+        .find(|listener| listener.transport == TransportKind::Http)
+        .ok_or(ApiError::InvalidConfiguration("GHA_INDIE_WORKER_API_BIND"))?;
+
     for listener in &plan.listeners {
         match listener.transport {
-            TransportKind::Http | TransportKind::StatefulTcp => println!(
-                "api {:?} endpoint {}",
-                listener.transport, listener.endpoint
-            ),
-            TransportKind::DurableNats => println!("api DurableNats configured"),
+            TransportKind::Http | TransportKind::StatefulTcp => {
+                eprintln!("api {:?} endpoint {}", listener.transport, listener.endpoint);
+            }
+            TransportKind::DurableNats => eprintln!("api DurableNats configured"),
         }
     }
-    println!(
-        "{}",
-        serde_json::to_string(&routes::health::body()).map_err(|_| ApiError::Serialization)?
-    );
+
+    let listener = TcpListener::bind(&http.endpoint)?;
+    for connection in listener.incoming() {
+        match connection {
+            Ok(stream) => {
+                if let Err(error) = handle_http(stream) {
+                    eprintln!("api http connection failed: {error}");
+                }
+            }
+            Err(error) => eprintln!("api http accept failed: {error}"),
+        }
+    }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{startup_plan, ListenerBinding, StartupPlan, TransportKind};
+    use super::{response_for, startup_plan, ListenerBinding, StartupPlan, TransportKind};
     use crate::{config::ApiConfig, error::ApiError};
 
     #[test]
@@ -168,5 +250,21 @@ mod tests {
         let debug = format!("{plan:?}");
         assert!(debug.contains("[redacted]"));
         assert!(!debug.contains("credential"));
+    }
+
+    #[test]
+    fn health_and_readiness_are_real_http_routes() {
+        for path in ["/healthz", "/readyz"] {
+            let (status, content_type, body) = response_for("GET", path).expect("response");
+            assert_eq!(status, 200);
+            assert_eq!(content_type, "application/json; charset=utf-8");
+            assert!(body.contains("gha-indie-worker-api-server"));
+        }
+    }
+
+    #[test]
+    fn unknown_routes_fail_closed() {
+        let (status, _, _) = response_for("GET", "/not-a-route").expect("response");
+        assert_eq!(status, 404);
     }
 }
