@@ -8,6 +8,7 @@ pub struct HealthBody {
     pub service: &'static str,
 }
 
+#[allow(clippy::needless_return)]
 pub fn body() -> HealthBody {
     return HealthBody {
         ok: true,
